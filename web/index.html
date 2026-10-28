@@ -12,40 +12,56 @@
       font-family: 'Plus Jakarta Sans', sans-serif;
       background-color: #06090e;
       color: #e2e8f0;
-      overflow-x: hidden;
+      margin: 0;
+      padding: 0;
     }
     .mono { font-family: 'JetBrains Mono', monospace; }
     .noc-grid {
-      background-size: 28px 28px;
+      background-size: 26px 26px;
       background-image: 
-        linear-gradient(to right, rgba(14, 165, 233, 0.04) 1px, transparent 1px),
-        linear-gradient(to bottom, rgba(14, 165, 233, 0.04) 1px, transparent 1px);
+        linear-gradient(to right, rgba(14, 165, 233, 0.035) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(14, 165, 233, 0.035) 1px, transparent 1px);
     }
     @keyframes glow-pulse {
-      0%, 100% { filter: drop-shadow(0 0 10px rgba(6, 182, 212, 0.7)); }
-      50% { filter: drop-shadow(0 0 22px rgba(6, 182, 212, 1)); }
+      0%, 100% { filter: drop-shadow(0 0 10px rgba(6, 182, 212, 0.75)); }
+      50% { filter: drop-shadow(0 0 24px rgba(6, 182, 212, 1)); }
     }
     .route-glow { animation: glow-pulse 2s infinite ease-in-out; }
+
+    @keyframes bridge-pulse {
+      0%, 100% { filter: drop-shadow(0 0 8px rgba(245, 158, 11, 0.7)); }
+      50% { filter: drop-shadow(0 0 22px rgba(245, 158, 11, 1)); }
+    }
+    .bridge-glow { animation: bridge-pulse 1.8s infinite ease-in-out; }
+
     @keyframes spin-slow {
       from { transform: rotate(0deg); }
       to { transform: rotate(360deg); }
     }
     .spin-halo {
-      animation: spin-slow 8s linear infinite;
+      animation: spin-slow 7s linear infinite;
       transform-origin: center;
     }
+
+    @keyframes node-visit {
+      0% { r: 24px; stroke: #38bdf8; stroke-width: 3px; }
+      50% { r: 36px; stroke: #0284c7; stroke-width: 7px; }
+      100% { r: 24px; stroke: #38bdf8; stroke-width: 3px; }
+    }
+    .node-pulse-active { animation: node-visit 1s infinite ease-in-out; }
+
     ::-webkit-scrollbar { width: 5px; height: 5px; }
-    ::-webkit-scrollbar-track { background: #0a0f18; }
+    ::-webkit-scrollbar-track { background: #080c14; }
     ::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 4px; }
     ::-webkit-scrollbar-thumb:hover { background: #334155; }
   </style>
 </head>
-<body class="noc-grid min-h-screen flex flex-col select-none">
-  <!-- Top Primary Bar -->
-  <header class="h-14 border-b border-slate-800/90 bg-[#070b12] px-5 flex items-center justify-between z-10 shrink-0">
+<body class="noc-grid h-screen w-screen overflow-hidden flex flex-col select-none">
+  <!-- Top Primary Navigation Bar -->
+  <header class="h-14 border-b border-slate-800/90 bg-[#070b12] px-5 flex items-center justify-between z-20 shrink-0">
     <div class="flex items-center gap-3">
       <div class="w-8 h-8 rounded-lg bg-gradient-to-tr from-cyan-600 to-blue-600 flex items-center justify-center text-white font-bold text-sm shadow-lg shadow-cyan-500/20">
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
       </div>
       <div class="flex items-center gap-2">
         <span class="font-extrabold text-sm tracking-wide text-white">NET-BLACKOUT</span>
@@ -55,7 +71,7 @@
     </div>
 
     <!-- Top Telemetry Ribbon -->
-    <div class="hidden xl:flex items-center gap-8">
+    <div class="hidden xl:flex items-center gap-7">
       <div>
         <div class="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">Route Status</div>
         <div id="stat-route" class="text-xs font-bold text-cyan-400 mono flex items-center gap-1.5">
@@ -91,53 +107,89 @@
     </div>
   </header>
 
-  <!-- Central Area: Left Sidebar + Canvas -->
-  <div class="flex-1 flex overflow-hidden">
+  <!-- Central Work Area -->
+  <div class="flex-1 flex min-h-0 overflow-hidden">
     <!-- Left Control Rail -->
     <aside class="w-72 bg-[#090d16] border-r border-slate-800/80 flex flex-col shrink-0">
+      <!-- Primary Simulation Button -->
       <div class="p-3.5 border-b border-slate-800/70">
         <div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2 flex items-center justify-between">
-          <span>Primary Simulation</span>
+          <span class="flex items-center gap-1.5">
+            <svg class="w-3 h-3 text-amber-400" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10A1 1 0 018 18v-5H4a1 1 0 01-.82-1.573l7-10a1 1 0 011.12-.38z" clip-rule="evenodd"/></svg>
+            Primary Simulation
+          </span>
           <span class="w-2 h-2 rounded-full bg-rose-500"></span>
         </div>
-        <button id="btn-blackout" class="w-full py-2 px-3 bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 text-white font-bold text-xs rounded-lg shadow-lg shadow-rose-900/30 flex items-center justify-between transition-all">
-          <span>Simulate Blackout (R3-R5)</span>
-          <span class="text-[10px] bg-rose-950/70 px-1.5 py-0.5 rounded border border-rose-700/60">FAILOVER</span>
+        <button id="btn-blackout" class="w-full py-2 px-3 bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 text-white font-bold text-xs rounded-lg shadow-lg shadow-rose-900/30 flex items-center justify-between transition-all active:scale-[0.98]">
+          <span class="flex items-center gap-1.5">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/></svg>
+            Simulate Blackout (R3-R5)
+          </span>
+          <span class="text-[9.5px] bg-rose-950/80 px-1.5 py-0.5 rounded border border-rose-700/60 font-mono tracking-wider">FAILOVER</span>
         </button>
       </div>
 
-      <!-- Action Buttons -->
+      <!-- Action Buttons 2x2 Grid -->
       <div class="p-3 border-b border-slate-800/70 grid grid-cols-2 gap-2">
-        <button id="btn-bridges" class="py-1.5 px-2 bg-slate-800/70 hover:bg-slate-700 text-slate-300 font-semibold text-[11px] rounded border border-slate-700/60 flex items-center justify-center gap-1.5">
-          <span class="w-2 h-2 rounded-full bg-amber-400"></span> Tarjan Bridges
+        <button id="btn-bridges" class="py-2 px-2 bg-slate-800/80 hover:bg-amber-950/40 hover:border-amber-500/80 text-slate-200 hover:text-amber-300 font-semibold text-[11px] rounded-lg border border-slate-700/70 flex items-center justify-center gap-1.5 transition-all shadow-sm active:scale-[0.98]">
+          <svg class="w-3.5 h-3.5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+          Tarjan Bridges
         </button>
-        <button id="btn-cuts" class="py-1.5 px-2 bg-slate-800/70 hover:bg-slate-700 text-slate-300 font-semibold text-[11px] rounded border border-slate-700/60 flex items-center justify-center gap-1.5">
-          <span class="w-2 h-2 rounded-full bg-orange-400"></span> Cut Vertices
+        <button id="btn-cuts" class="py-2 px-2 bg-slate-800/80 hover:bg-orange-950/40 hover:border-orange-500/80 text-slate-200 hover:text-orange-300 font-semibold text-[11px] rounded-lg border border-slate-700/70 flex items-center justify-center gap-1.5 transition-all shadow-sm active:scale-[0.98]">
+          <svg class="w-3.5 h-3.5 text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke-width="2"/><circle cx="12" cy="12" r="4" stroke-width="2"/></svg>
+          Cut Vertices
         </button>
-        <button id="btn-bfs" class="py-1.5 px-2 bg-slate-800/70 hover:bg-slate-700 text-slate-300 font-semibold text-[11px] rounded border border-slate-700/60 flex items-center justify-center gap-1.5">
-          <span class="w-2 h-2 rounded-full bg-cyan-400"></span> BFS Order
+        <button id="btn-bfs" class="py-2 px-2 bg-slate-800/80 hover:bg-cyan-950/40 hover:border-cyan-500/80 text-slate-200 hover:text-cyan-300 font-semibold text-[11px] rounded-lg border border-slate-700/70 flex items-center justify-center gap-1.5 transition-all shadow-sm active:scale-[0.98]">
+          <svg class="w-3.5 h-3.5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+          BFS Order
         </button>
-        <button id="btn-dfs" class="py-1.5 px-2 bg-slate-800/70 hover:bg-slate-700 text-slate-300 font-semibold text-[11px] rounded border border-slate-700/60 flex items-center justify-center gap-1.5">
-          <span class="w-2 h-2 rounded-full bg-blue-400"></span> DFS Order
+        <button id="btn-dfs" class="py-2 px-2 bg-slate-800/80 hover:bg-blue-950/40 hover:border-blue-500/80 text-slate-200 hover:text-blue-300 font-semibold text-[11px] rounded-lg border border-slate-700/70 flex items-center justify-center gap-1.5 transition-all shadow-sm active:scale-[0.98]">
+          <svg class="w-3.5 h-3.5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16m-7 6h7"/></svg>
+          DFS Order
         </button>
-        <button id="btn-recover" class="col-span-2 py-1.5 bg-slate-900 hover:bg-slate-800 text-slate-300 font-semibold text-[11px] rounded border border-slate-800 flex items-center justify-center gap-1.5">
-          <svg class="w-3.5 h-3.5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
-          Recover All Links
-        </button>
+        <div class="col-span-2 flex items-center gap-1.5">
+          <button id="btn-recover" class="flex-1 py-1.5 bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white font-semibold text-[11px] rounded-lg border border-slate-800 flex items-center justify-center gap-1.5 transition-all">
+            <svg class="w-3.5 h-3.5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+            Recover All Links
+          </button>
+          <button id="btn-refresh-layout" title="Reset Node Coordinates" class="py-1.5 px-2 bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-slate-200 rounded-lg border border-slate-800 flex items-center justify-center">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/></svg>
+          </button>
+        </div>
       </div>
 
-      <!-- Edge Toggle Control List -->
+      <!-- Live Edge Toggle Circuit List -->
+      <div class="p-3 pb-1 border-b border-slate-800/40 flex items-center justify-between">
+        <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Circuit Switching & Links</span>
+        <span id="circuit-counter-badge" class="text-[9.5px] px-1.5 py-0.2 rounded bg-slate-800 text-slate-400 mono">9/9 UP</span>
+      </div>
       <div class="flex-1 overflow-y-auto p-3 space-y-1.5" id="edge-controls-list">
         <!-- Rendered dynamically -->
       </div>
     </aside>
 
     <!-- Main Interactive Canvas -->
-    <main class="flex-1 flex flex-col relative bg-[#06090f] overflow-hidden">
-      <svg id="network-svg" class="w-full h-full min-h-[420px]" viewBox="0 0 1000 540">
+    <main class="flex-1 flex flex-col relative bg-[#06090f] overflow-hidden min-h-0">
+      <!-- Animated HUD Banner Notification -->
+      <div id="hud-banner" class="absolute top-3 left-4 right-4 z-20 pointer-events-none transition-all duration-300 opacity-0 translate-y-[-10px]">
+        <div id="hud-banner-box" class="py-2.5 px-4 rounded-xl border flex items-center justify-between text-xs font-semibold backdrop-blur-md shadow-2xl">
+          <div class="flex items-center gap-2">
+            <span id="hud-icon" class="w-2.5 h-2.5 rounded-full animate-ping"></span>
+            <span id="hud-title" class="font-bold"></span>
+            <span id="hud-desc" class="text-slate-300 font-normal"></span>
+          </div>
+          <span id="hud-badge" class="px-2 py-0.5 rounded mono text-[10px] font-bold"></span>
+        </div>
+      </div>
+
+      <svg id="network-svg" class="w-full h-full flex-1" viewBox="0 0 1000 520" preserveAspectRatio="xMidYMid meet">
         <defs>
           <filter id="cyanGlow" x="-20%" y="-20%" width="140%" height="140%">
             <feGaussianBlur stdDeviation="6" result="blur" />
+            <feComposite in="SourceGraphic" in2="blur" operator="over" />
+          </filter>
+          <filter id="amberGlow" x="-25%" y="-25%" width="150%" height="150%">
+            <feGaussianBlur stdDeviation="7" result="blur" />
             <feComposite in="SourceGraphic" in2="blur" operator="over" />
           </filter>
         </defs>
@@ -148,7 +200,7 @@
       </svg>
 
       <!-- Bottom Canvas Overlay Legend -->
-      <div class="absolute bottom-3 left-4 bg-[#090d16]/90 border border-slate-800/90 rounded-lg px-3.5 py-1.5 flex items-center gap-4 text-[11px] backdrop-blur-md">
+      <div class="absolute bottom-2 left-4 bg-[#090d16]/90 border border-slate-800/90 rounded-lg px-3.5 py-1.5 flex items-center gap-4 text-[11px] backdrop-blur-md z-10">
         <div class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span> Reachable</div>
         <div class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-rose-500"></span> Isolated</div>
         <div class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-amber-400"></span> Cut Vertex</div>
@@ -159,9 +211,9 @@
   </div>
 
   <!-- Bottom Diagnostics Console / Drawer -->
-  <footer class="h-44 bg-[#070a10] border-t border-slate-800 flex flex-col shrink-0">
+  <footer class="h-44 bg-[#070a10] border-t border-slate-800/90 flex flex-col shrink-0 z-10">
     <!-- Drawer Tabs -->
-    <div class="h-8 border-b border-slate-800/80 px-4 flex items-center justify-between text-xs bg-[#090d16]">
+    <div class="h-8 border-b border-slate-800/80 px-4 flex items-center justify-between text-xs bg-[#090d16] shrink-0">
       <div class="flex items-center gap-4 h-full">
         <button id="tab-btn-logs" onclick="switchBottomTab('logs')" class="h-full border-b-2 font-semibold px-2 flex items-center gap-1.5 border-cyan-500 text-cyan-400">
           <span>&gt;_ Live OSPF Event Log</span>
@@ -174,22 +226,22 @@
         </button>
       </div>
 
-      <div class="text-[11px] text-slate-500 mono">
-        Status: NORMAL_MONITORING
+      <div class="text-[11px] text-slate-500 mono flex items-center gap-2">
+        <span>DSA Graph: |V| = 8, |E| = 9</span>
       </div>
     </div>
 
     <!-- Tab Contents -->
     <div class="flex-1 p-3 overflow-y-auto mono text-xs">
       <div id="tab-content-logs" class="space-y-1"></div>
-      <div id="tab-content-dsa" class="text-slate-300 space-y-1 leading-relaxed hidden">
-        <div>• <strong class="text-cyan-400">Breadth-First Search (BFS):</strong> O(|V| + |E|) time. Queue-based level-order reachability inspection from source R1.</div>
-        <div>• <strong class="text-cyan-400">Tarjan's Bridge Algorithm:</strong> O(|V| + |E|) time. Identifies cut-edges where low[child] &gt; tin[u].</div>
+      <div id="tab-content-dsa" class="text-slate-300 space-y-1.5 leading-relaxed hidden">
+        <div>• <strong class="text-cyan-400">Breadth-First Search (BFS):</strong> O(|V| + |E|) time. Queue-based level-order reachability inspection starting from source R1.</div>
+        <div>• <strong class="text-cyan-400">Tarjan's Bridge Algorithm:</strong> O(|V| + |E|) time. Identifies critical cut-edges where low[child] &gt; tin[u].</div>
         <div>• <strong class="text-cyan-400">Tarjan's Articulation Points:</strong> O(|V| + |E|) time. Evaluates root children &ge; 2 and low[v] &ge; tin[u].</div>
         <div>• <strong class="text-cyan-400">Dijkstra SPF Failover:</strong> O(|E| log |V|) via binary min-heap. Automatically pivots from primary uplink (cost 4) to backup R2-R5 (cost 7).</div>
       </div>
       <div id="tab-content-cisco" class="text-slate-400 text-[11px] space-y-1 hidden">
-        <div class="text-emerald-400">! Cisco Packet Tracer Area 0 Link Configurations:</div>
+        <div class="text-emerald-400 font-bold">! Cisco Packet Tracer Area 0 Link Configurations:</div>
         <div>router ospf 1</div>
         <div> network 10.0.12.0 0.0.0.3 area 0  ! R1-R2 Inter-router link</div>
         <div> network 10.0.23.0 0.0.0.3 area 0  ! R2-R3 Inter-router link</div>
@@ -200,16 +252,26 @@
   </footer>
 
   <script>
-    // State
+    const INITIAL_COORDS = {
+      "R1": { x: 130, y: 220 },
+      "R2": { x: 320, y: 110 },
+      "R3": { x: 550, y: 140 },
+      "R4": { x: 420, y: 370 },
+      "R5": { x: 770, y: 220 },
+      "PC1": { x: 70, y: 390 },
+      "PC2": { x: 420, y: 480 },
+      "Server1": { x: 910, y: 220 }
+    };
+
     const NODES = [
-      { id: "R1", label: "Router 1", type: "router", role: "Edge Router", x: 120, y: 240, ip: "10.0.12.1" },
-      { id: "R2", label: "Router 2", type: "router", role: "Distribution", x: 310, y: 110, ip: "10.0.23.1" },
-      { id: "R3", label: "Router 3", type: "router", role: "Core Router", x: 540, y: 140, ip: "10.0.35.1" },
-      { id: "R4", label: "Router 4", type: "router", role: "Branch Router", x: 420, y: 380, ip: "10.0.34.2" },
-      { id: "R5", label: "Router 5", type: "router", role: "Services Core", x: 770, y: 240, ip: "10.0.35.2" },
-      { id: "PC1", label: "PC1", type: "host", role: "Client LAN", x: 60, y: 410, ip: "192.168.10.10" },
-      { id: "PC2", label: "PC2", type: "host", role: "Branch LAN", x: 420, y: 500, ip: "192.168.40.10" },
-      { id: "Server1", label: "Server1", type: "server", role: "Mission Critical", x: 910, y: 240, ip: "192.168.50.10" }
+      { id: "R1", label: "Edge Router 1", type: "router", role: "Edge Router", x: 130, y: 220, ip: "10.0.12.1" },
+      { id: "R2", label: "Router 2", type: "router", role: "Distribution", x: 320, y: 110, ip: "10.0.23.1" },
+      { id: "R3", label: "Router 3", type: "router", role: "Core Router", x: 550, y: 140, ip: "10.0.35.1" },
+      { id: "R4", label: "Router 4", type: "router", role: "Branch Router", x: 420, y: 370, ip: "10.0.34.2" },
+      { id: "R5", label: "Router 5", type: "router", role: "Services Core", x: 770, y: 220, ip: "10.0.35.2" },
+      { id: "PC1", label: "PC1", type: "host", role: "Client LAN", x: 70, y: 390, ip: "192.168.10.10" },
+      { id: "PC2", label: "PC2", type: "host", role: "Branch LAN", x: 420, y: 480, ip: "192.168.40.10" },
+      { id: "Server1", label: "Server1", type: "server", role: "Mission Critical", x: 910, y: 220, ip: "192.168.50.10" }
     ];
 
     const EDGES = [
@@ -229,15 +291,42 @@
     let pathCost = 0;
     let bridges = new Set();
     let cutVertices = new Set();
+    let activeHighlightMode = null; // 'bridges' | 'cuts' | 'traversal'
+    let activeVisitedNode = null;
     const logs = [];
 
     function edgeKey(u, v) {
       return [u, v].sort().join("-");
     }
 
+    function showHudBanner(title, desc, badge, bgClass, textClass, borderClass, dotClass) {
+      const banner = document.getElementById("hud-banner");
+      const box = document.getElementById("hud-banner-box");
+      const icon = document.getElementById("hud-icon");
+      const titleEl = document.getElementById("hud-title");
+      const descEl = document.getElementById("hud-desc");
+      const badgeEl = document.getElementById("hud-badge");
+
+      box.className = `py-2.5 px-4 rounded-xl border flex items-center justify-between text-xs font-semibold backdrop-blur-md shadow-2xl ${bgClass} ${textClass} ${borderClass}`;
+      icon.className = `w-2.5 h-2.5 rounded-full animate-ping ${dotClass}`;
+      titleEl.textContent = title;
+      descEl.textContent = desc;
+      badgeEl.textContent = badge;
+      badgeEl.className = `px-2 py-0.5 rounded mono text-[10px] font-bold border ${dotClass} bg-black/40 text-white`;
+
+      banner.classList.remove("opacity-0", "translate-y-[-10px]");
+      banner.classList.add("opacity-100", "translate-y-0");
+
+      clearTimeout(window.hudTimer);
+      window.hudTimer = setTimeout(() => {
+        banner.classList.remove("opacity-100", "translate-y-0");
+        banner.classList.add("opacity-0", "translate-y-[-10px]");
+      }, 5500);
+    }
+
     function addLog(msg, tag = "INFO", tagClass = "text-cyan-400 bg-cyan-950/60 border-cyan-800/60") {
       const d = new Date();
-      const time = d.toTimeString().split(' ')[0] + '.' + String(d.getMilliseconds()).padStart(3, '0');
+      const time = d.toTimeString().split(' ')[0] + '.' + String(d.getMilliseconds()).padStart(3, '0').slice(0, 2);
       logs.unshift({ time, tag, tagClass, msg });
       if (logs.length > 100) logs.pop();
       renderLogs();
@@ -384,46 +473,154 @@
       const key = edgeKey("R3", "R5");
       failedEdges.add(key);
       addLog("BLACKOUT TRIGGERED: Primary trunk R3-R5 (10.0.35.0/30) collapsed.", "CRITICAL", "text-rose-400 bg-rose-950/60 border-rose-800/60");
-      addLog("OSPF FLOODING: Recalculating SPF; traffic dynamically rerouted via R2-R5 backup link.", "ROUTING", "text-cyan-400 bg-cyan-950/60 border-cyan-800/60");
+      addLog("OSPF FLOODING: Shortest Path First recalculation rerouting traffic via R2-R5 backup link.", "ROUTING", "text-cyan-400 bg-cyan-950/60 border-cyan-800/60");
+      showHudBanner("OSPF FAILOVER ACTIVATED", "Primary uplink R3-R5 collapsed. Traffic shifted to R2-R5 backup trunk.", "FAILOVER ACTIVE", "bg-rose-950/90", "text-rose-300", "border-rose-700", "bg-rose-500");
       runAlgorithms();
     }
 
     function recoverAll() {
       failedEdges.clear();
-      addLog("SEQUENTIAL RECOVERY INITIALIZED: Restored all failed links to nominal.", "SYSTEM", "text-blue-400 bg-blue-950/60 border-blue-800/60");
+      activeHighlightMode = null;
+      activeVisitedNode = null;
+      addLog("SEQUENTIAL RECOVERY INITIALIZED: Restoring failed links to nominal.", "SYSTEM", "text-blue-400 bg-blue-950/60 border-blue-800/60");
+      showHudBanner("CIRCUITS RECONSTITUTED", "All 9 edges operational. Network returned to 100% nominal state.", "RECOVERED", "bg-emerald-950/90", "text-emerald-300", "border-emerald-700", "bg-emerald-500");
       runAlgorithms();
     }
 
+    // 1. Tarjan Bridges Action
+    function triggerTarjanBridges() {
+      activeHighlightMode = 'bridges';
+      const bridgeList = Array.from(bridges).join(", ");
+      addLog(`TARJAN BRIDGES: Detected ${bridges.size} bridge edges: ${bridgeList}. Removing any of these increases disconnected components.`, "WARNING", "text-amber-400 bg-amber-950 border-amber-800");
+      showHudBanner("TARJAN BRIDGES DETECTED", `Critical cut-edges: [${bridgeList}]. Edge failure partitions topology!`, `O(V+E) | ${bridges.size} BRIDGES`, "bg-amber-950/90", "text-amber-300", "border-amber-700", "bg-amber-500");
+      updateUI();
+    }
+
+    // 2. Tarjan Cut Vertices Action
+    function triggerCutVertices() {
+      activeHighlightMode = 'cuts';
+      const cutList = Array.from(cutVertices).join(", ");
+      addLog(`TARJAN ARTICULATION POINTS (${cutVertices.size}): Router(s) [${cutList}] critical to component separation.`, "WARNING", "text-orange-400 bg-orange-950 border-orange-800");
+      showHudBanner("TARJAN ARTICULATION POINTS", `Critical cut vertices: [${cutList}]. Router hardware loss cuts off subnets!`, `O(V+E) | ${cutVertices.size} CUT-NODES`, "bg-orange-950/90", "text-orange-300", "border-orange-700", "bg-orange-500");
+      updateUI();
+    }
+
+    // 3. BFS Animated Traversal
+    function triggerBFS() {
+      activeHighlightMode = 'traversal';
+      const q = ["R1"], visited = new Set(["R1"]), order = [];
+      while (q.length > 0) {
+        const curr = q.shift();
+        order.push(curr);
+        EDGES.forEach(e => {
+          if (failedEdges.has(edgeKey(e.u, e.v))) return;
+          const neighbor = e.u === curr ? e.v : (e.v === curr ? e.u : null);
+          if (neighbor && !visited.has(neighbor)) { visited.add(neighbor); q.push(neighbor); }
+        });
+      }
+
+      addLog(`RUNNING BFS: ${order.join(" → ")}`, "DSA", "text-cyan-400 bg-cyan-950/60 border-cyan-800/60");
+      showHudBanner("BFS LEVEL-ORDER TRAVERSAL", `Sequence: ${order.join(" → ")}`, `QUEUE O(V+E)`, "bg-cyan-950/90", "text-cyan-300", "border-cyan-700", "bg-cyan-500");
+
+      let step = 0;
+      clearInterval(window.traversalInterval);
+      window.traversalInterval = setInterval(() => {
+        if (step >= order.length) {
+          clearInterval(window.traversalInterval);
+          activeVisitedNode = null;
+          updateUI();
+          return;
+        }
+        activeVisitedNode = order[step];
+        updateUI();
+        step++;
+      }, 550);
+    }
+
+    // 4. DFS Animated Traversal
+    function triggerDFS() {
+      activeHighlightMode = 'traversal';
+      const stack = ["R1"], visited = new Set(), order = [];
+      while (stack.length > 0) {
+        const curr = stack.pop();
+        if (visited.has(curr)) continue;
+        visited.add(curr);
+        order.push(curr);
+        const neighbors = [];
+        EDGES.forEach(e => {
+          if (failedEdges.has(edgeKey(e.u, e.v))) return;
+          if (e.u === curr) neighbors.push(e.v);
+          if (e.v === curr) neighbors.push(e.u);
+        });
+        neighbors.reverse().forEach(n => { if (!visited.has(n)) stack.push(n); });
+      }
+
+      addLog(`RUNNING DFS: ${order.join(" → ")}`, "DSA", "text-blue-400 bg-blue-950/60 border-blue-800/60");
+      showHudBanner("DFS DEPTH-FIRST TRAVERSAL", `Sequence: ${order.join(" → ")}`, `STACK O(V+E)`, "bg-blue-950/90", "text-blue-300", "border-blue-700", "bg-blue-500");
+
+      let step = 0;
+      clearInterval(window.traversalInterval);
+      window.traversalInterval = setInterval(() => {
+        if (step >= order.length) {
+          clearInterval(window.traversalInterval);
+          activeVisitedNode = null;
+          updateUI();
+          return;
+        }
+        activeVisitedNode = order[step];
+        updateUI();
+        step++;
+      }, 550);
+    }
+
+    function resetLayout() {
+      NODES.forEach(n => {
+        if (INITIAL_COORDS[n.id]) {
+          n.x = INITIAL_COORDS[n.id].x;
+          n.y = INITIAL_COORDS[n.id].y;
+        }
+      });
+      updateUI();
+      addLog("Topology coordinate positions reset to nominal layout.", "SYSTEM", "text-slate-400 bg-slate-900 border-slate-800");
+    }
+
     function updateUI() {
-      // 1. Telemetry
+      // 1. Telemetry Top Bar
       const routeTxt = activePath.length ? activePath.join(" → ") : "BLACKOUT (Unreachable)";
       document.getElementById("stat-route").innerHTML = `
         <span class="w-1.5 h-1.5 rounded-full ${activePath.length ? 'bg-cyan-400 animate-ping' : 'bg-rose-500'}"></span>
         <span>${routeTxt}</span>
       `;
-      document.getElementById("stat-cost").textContent = pathCost !== Infinity ? `${pathCost} (Active Path)` : "INF (Blackout)";
+      document.getElementById("stat-cost").textContent = pathCost !== Infinity ? `${pathCost} (Primary Trunk)` : "INF (Blackout)";
       document.getElementById("stat-bridges").textContent = `${bridges.size} Cut-Edges`;
       document.getElementById("stat-cuts").textContent = `${cutVertices.size} Cut-Nodes`;
 
-      const health = Math.round(((EDGES.length - failedEdges.size) / EDGES.length) * 100);
+      const upCount = EDGES.length - failedEdges.size;
+      const health = Math.round((upCount / EDGES.length) * 100);
       document.getElementById("stat-health-txt").textContent = `${health}%`;
       const bar = document.getElementById("stat-health-bar");
       bar.style.width = `${health}%`;
       bar.className = `h-full transition-all duration-500 ${health > 75 ? 'bg-emerald-500' : (health > 40 ? 'bg-amber-500' : 'bg-rose-500')}`;
+      document.getElementById("circuit-counter-badge").textContent = `${upCount}/9 UP`;
 
       // 2. Render Left Edge list
       const edgeList = document.getElementById("edge-controls-list");
       edgeList.innerHTML = EDGES.map(e => {
         const key = edgeKey(e.u, e.v);
         const isDown = failedEdges.has(key);
+        const isBridge = bridges.has(key);
         return `
           <div class="p-2 rounded-lg border flex items-center justify-between text-xs transition-all ${isDown ? 'bg-rose-950/20 border-rose-900/50' : 'bg-slate-900/60 border-slate-800 hover:border-slate-700'}">
-            <div>
-              <div class="font-semibold text-slate-200 flex items-center gap-1.5">
-                ${e.name}
-                ${e.backup ? '<span class="text-[9px] px-1 py-0.2 bg-purple-950 text-purple-300 border border-purple-800 rounded">BACKUP</span>' : ''}
+            <div class="flex items-center gap-2">
+              <span class="w-2 h-2 rounded-full ${isDown ? 'bg-rose-500' : 'bg-cyan-400'}"></span>
+              <div>
+                <div class="font-semibold text-slate-200 flex items-center gap-1.5">
+                  ${e.name}
+                  ${isBridge && !isDown ? '<span class="text-[8.5px] px-1 bg-amber-950 text-amber-300 border border-amber-800 rounded">BRIDGE</span>' : ''}
+                  ${e.backup && !isDown ? '<span class="text-[8.5px] px-1 bg-purple-950 text-purple-300 border border-purple-800 rounded">BACKUP</span>' : ''}
+                </div>
+                <div class="text-[10px] text-slate-400 mono">Cost: ${e.cost} • ${e.subnet}</div>
               </div>
-              <div class="text-[10px] text-slate-400 mono">Cost: ${e.cost} • ${e.subnet}</div>
             </div>
             <button onclick="toggleLink('${e.u}', '${e.v}')" class="px-2.5 py-1 rounded text-[10px] font-bold transition-all ${isDown ? 'bg-rose-600 hover:bg-rose-500 text-white' : 'bg-emerald-600 hover:bg-emerald-500 text-white'}">
               ${isDown ? 'DOWN' : 'UP'}
@@ -445,16 +642,22 @@
         );
 
         let strokeColor = "#334155";
-        let strokeWidth = 2;
+        let strokeWidth = 2.5;
         let strokeDash = "";
+        let filterEffect = "";
 
         if (isFailed) {
           strokeColor = "#ef4444";
           strokeDash = "6 6";
           strokeWidth = 3;
+        } else if (activeHighlightMode === 'bridges' && isBridge) {
+          strokeColor = "#f59e0b";
+          strokeWidth = 6;
+          filterEffect = 'filter="url(#amberGlow)" class="bridge-glow"';
         } else if (onRoute) {
           strokeColor = "#06b6d4";
           strokeWidth = 5;
+          filterEffect = 'filter="url(#cyanGlow)"';
         } else if (isBridge) {
           strokeColor = "#f59e0b";
           strokeWidth = 4;
@@ -470,7 +673,7 @@
           <g class="cursor-pointer" onclick="toggleLink('${e.u}', '${e.v}')">
             <line x1="${uNode.x}" y1="${uNode.y}" x2="${vNode.x}" y2="${vNode.y}" 
                   stroke="${strokeColor}" stroke-width="${strokeWidth}" stroke-dasharray="${strokeDash}"
-                  ${onRoute && !isFailed ? 'filter="url(#cyanGlow)"' : ''} />
+                  ${filterEffect} />
             <line x1="${uNode.x}" y1="${uNode.y}" x2="${vNode.x}" y2="${vNode.y}" stroke="transparent" stroke-width="22" />
             <rect x="${mx - 18}" y="${my - 9}" width="36" height="18" rx="5" fill="#090d16" stroke="${strokeColor}" stroke-width="1" />
             <text x="${mx}" y="${my + 3.5}" text-anchor="middle" fill="#cbd5e1" font-size="9.5" font-weight="600" class="mono">
@@ -480,12 +683,14 @@
         `;
       }).join("");
 
-      // 4. Render SVG Nodes
+      // 4. Render SVG Nodes with Cisco Icons
       const nodesLayer = document.getElementById("nodes-layer");
       nodesLayer.innerHTML = NODES.map(n => {
         const online = isReachable(n.id);
         const isCut = cutVertices.has(n.id);
         const isDest = n.id === "Server1";
+        const isHost = n.id.startsWith("PC");
+        const isVisitedNow = activeVisitedNode === n.id;
 
         let fillColor = "#111827";
         let borderColor = "#475569";
@@ -493,6 +698,9 @@
         if (!online) {
           fillColor = "#3f0d12";
           borderColor = "#ef4444";
+        } else if (isVisitedNow) {
+          fillColor = "#0369a1";
+          borderColor = "#38bdf8";
         } else if (isDest) {
           fillColor = "#042f2e";
           borderColor = "#14b8a6";
@@ -501,11 +709,51 @@
           borderColor = "#10b981";
         }
 
+        const halo = (isCut && online) ? `
+          <circle r="${activeHighlightMode === 'cuts' ? 36 : 32}" fill="none" stroke="#f59e0b" stroke-width="${activeHighlightMode === 'cuts' ? 3 : 2}" stroke-dasharray="5 5" class="spin-halo" />
+        ` : '';
+
+        const visitHalo = isVisitedNow ? `
+          <circle r="36" fill="none" stroke="#38bdf8" stroke-width="3" class="node-pulse-active" />
+        ` : '';
+
+        // Device Icon inside circle matching Google Sites
+        let iconSvg = '';
+        if (isDest) {
+          // Server icon
+          iconSvg = `
+            <g transform="translate(-10, -10)" stroke="#14b8a6" fill="none" stroke-width="1.8">
+              <rect x="2" y="2" width="16" height="7" rx="1.5"/>
+              <rect x="2" y="11" width="16" height="7" rx="1.5"/>
+              <circle cx="6" cy="5.5" r="0.8" fill="#14b8a6"/>
+              <circle cx="6" cy="14.5" r="0.8" fill="#14b8a6"/>
+            </g>
+          `;
+        } else if (isHost) {
+          // PC/Host icon
+          iconSvg = `
+            <g transform="translate(-10, -10)" stroke="#94a3b8" fill="none" stroke-width="1.8">
+              <rect x="2" y="3" width="16" height="11" rx="1.5"/>
+              <path d="M7 17h6M10 14v3"/>
+            </g>
+          `;
+        } else {
+          // Router icon ((•))
+          iconSvg = `
+            <g transform="translate(-11, -11)" stroke="#38bdf8" fill="none" stroke-width="1.8">
+              <circle cx="11" cy="11" r="2.2" fill="#38bdf8"/>
+              <path d="M7.5 7.5a5 5 0 000 7M14.5 7.5a5 5 0 010 7"/>
+              <path d="M5 5a8.5 8.5 0 000 12M17 5a8.5 8.5 0 010 12"/>
+            </g>
+          `;
+        }
+
         return `
           <g transform="translate(${n.x}, ${n.y})" class="cursor-move select-none" onmousedown="startDrag('${n.id}', event)">
-            ${isCut && online ? `<circle r="32" fill="none" stroke="#f59e0b" stroke-width="2" stroke-dasharray="5 5" class="spin-halo" />` : ''}
+            ${halo}
+            ${visitHalo}
             <circle r="23" fill="${fillColor}" stroke="${isCut ? '#f59e0b' : borderColor}" stroke-width="2.5" class="shadow-lg" />
-            <text text-anchor="middle" y="4.5" fill="#f8fafc" font-size="11" font-weight="700">${n.id}</text>
+            ${iconSvg}
             <g transform="translate(0, 32)">
               <rect x="-38" y="-10" width="76" height="20" rx="5" fill="#090d16" stroke="#1e293b" stroke-width="1" />
               <text text-anchor="middle" y="3.5" fill="#94a3b8" font-size="9" font-weight="600">${n.label}</text>
@@ -515,7 +763,7 @@
       }).join("");
     }
 
-    // Node Dragging
+    // Node Dragging Handlers
     let draggingNodeId = null;
     let dragOffset = { x: 0, y: 0 };
     const svgEl = document.getElementById("network-svg");
@@ -532,51 +780,20 @@
       const rect = svgEl.getBoundingClientRect();
       const node = NODES.find(n => n.id === draggingNodeId);
       node.x = Math.max(30, Math.min(960, e.clientX - rect.left - dragOffset.x));
-      node.y = Math.max(30, Math.min(520, e.clientY - rect.top - dragOffset.y));
+      node.y = Math.max(30, Math.min(500, e.clientY - rect.top - dragOffset.y));
       updateUI();
     });
 
     window.addEventListener("mouseup", () => draggingNodeId = null);
 
-    // Event listeners
+    // Event Listeners
     document.getElementById("btn-blackout").addEventListener("click", simulateBlackout);
     document.getElementById("btn-recover").addEventListener("click", recoverAll);
-    document.getElementById("btn-bridges").addEventListener("click", () => {
-      addLog(`Tarjan detected ${bridges.size} bridge edges.`, "ANALYSIS", "text-amber-400 bg-amber-950 border-amber-800");
-    });
-    document.getElementById("btn-cuts").addEventListener("click", () => {
-      addLog(`Tarjan detected ${cutVertices.size} cut vertices: ${Array.from(cutVertices).join(", ")}.`, "ANALYSIS", "text-orange-400 bg-orange-950 border-orange-800");
-    });
-    document.getElementById("btn-bfs").addEventListener("click", () => {
-      const q = ["R1"], visited = new Set(["R1"]), order = [];
-      while (q.length > 0) {
-        const curr = q.shift();
-        order.push(curr);
-        EDGES.forEach(e => {
-          if (failedEdges.has(edgeKey(e.u, e.v))) return;
-          const neighbor = e.u === curr ? e.v : (e.v === curr ? e.u : null);
-          if (neighbor && !visited.has(neighbor)) { visited.add(neighbor); q.push(neighbor); }
-        });
-      }
-      addLog(`BFS Traversal Sequence: ${order.join(" → ")} (${visited.size}/${NODES.length} reached)`, "ALGORITHM", "text-emerald-400 bg-emerald-950/60 border-emerald-800/60");
-    });
-    document.getElementById("btn-dfs").addEventListener("click", () => {
-      const stack = ["R1"], visited = new Set(), order = [];
-      while (stack.length > 0) {
-        const curr = stack.pop();
-        if (visited.has(curr)) continue;
-        visited.add(curr);
-        order.push(curr);
-        const neighbors = [];
-        EDGES.forEach(e => {
-          if (failedEdges.has(edgeKey(e.u, e.v))) return;
-          if (e.u === curr) neighbors.push(e.v);
-          if (e.v === curr) neighbors.push(e.u);
-        });
-        neighbors.reverse().forEach(n => { if (!visited.has(n)) stack.push(n); });
-      }
-      addLog(`DFS Traversal Sequence: ${order.join(" → ")}`, "ALGORITHM", "text-emerald-400 bg-emerald-950/60 border-emerald-800/60");
-    });
+    document.getElementById("btn-refresh-layout").addEventListener("click", resetLayout);
+    document.getElementById("btn-bridges").addEventListener("click", triggerTarjanBridges);
+    document.getElementById("btn-cuts").addEventListener("click", triggerCutVertices);
+    document.getElementById("btn-bfs").addEventListener("click", triggerBFS);
+    document.getElementById("btn-dfs").addEventListener("click", triggerDFS);
 
     // Boot
     addLog("Network Blackout Analyzer NOC online. OSPF Area 0 initialized.", "SYSTEM", "text-blue-400 bg-blue-950/60 border-blue-800/60");
