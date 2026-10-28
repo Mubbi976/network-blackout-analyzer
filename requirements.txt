@@ -1,0 +1,2 @@
+# Standard library only (tkinter, collections, heapq, unittest)
+# Python 3.10+ recommended

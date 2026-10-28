@@ -1,0 +1,588 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NET-BLACKOUT NOC v5.2 | Enterprise Graph Resilience</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      background-color: #06090e;
+      color: #e2e8f0;
+      overflow-x: hidden;
+    }
+    .mono { font-family: 'JetBrains Mono', monospace; }
+    .noc-grid {
+      background-size: 28px 28px;
+      background-image: 
+        linear-gradient(to right, rgba(14, 165, 233, 0.04) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(14, 165, 233, 0.04) 1px, transparent 1px);
+    }
+    @keyframes glow-pulse {
+      0%, 100% { filter: drop-shadow(0 0 10px rgba(6, 182, 212, 0.7)); }
+      50% { filter: drop-shadow(0 0 22px rgba(6, 182, 212, 1)); }
+    }
+    .route-glow { animation: glow-pulse 2s infinite ease-in-out; }
+    @keyframes spin-slow {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+    .spin-halo {
+      animation: spin-slow 8s linear infinite;
+      transform-origin: center;
+    }
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-track { background: #0a0f18; }
+    ::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: #334155; }
+  </style>
+</head>
+<body class="noc-grid min-h-screen flex flex-col select-none">
+  <!-- Top Primary Bar -->
+  <header class="h-14 border-b border-slate-800/90 bg-[#070b12] px-5 flex items-center justify-between z-10 shrink-0">
+    <div class="flex items-center gap-3">
+      <div class="w-8 h-8 rounded-lg bg-gradient-to-tr from-cyan-600 to-blue-600 flex items-center justify-center text-white font-bold text-sm shadow-lg shadow-cyan-500/20">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+      </div>
+      <div class="flex items-center gap-2">
+        <span class="font-extrabold text-sm tracking-wide text-white">NET-BLACKOUT</span>
+        <span class="text-[10px] font-bold px-2 py-0.5 rounded bg-cyan-950/80 text-cyan-400 border border-cyan-800/60 mono">NOC v5.2</span>
+      </div>
+      <span class="hidden md:inline text-xs text-slate-500 border-l border-slate-800 pl-3">DSA OSPF Graph Resilience</span>
+    </div>
+
+    <!-- Top Telemetry Ribbon -->
+    <div class="hidden xl:flex items-center gap-8">
+      <div>
+        <div class="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">Route Status</div>
+        <div id="stat-route" class="text-xs font-bold text-cyan-400 mono flex items-center gap-1.5">
+          <span class="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-ping"></span>
+          <span>R1 → R2 → R3 → R5 → Server1</span>
+        </div>
+      </div>
+      <div>
+        <div class="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">Active Path Cost</div>
+        <div id="stat-cost" class="text-xs font-bold text-slate-200 mono">4 (Primary trunk)</div>
+      </div>
+      <div>
+        <div class="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">Tarjan Bridges</div>
+        <div id="stat-bridges" class="text-xs font-bold text-amber-400 mono">3 Cut-Edges</div>
+      </div>
+      <div>
+        <div class="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">Articulation Points</div>
+        <div id="stat-cuts" class="text-xs font-bold text-orange-400 mono">3 Cut-Nodes</div>
+      </div>
+      <div class="w-28">
+        <div class="text-[10px] text-slate-400 uppercase tracking-wider font-semibold flex justify-between">
+          <span>Network Health</span>
+          <span id="stat-health-txt" class="text-emerald-400 font-bold">100%</span>
+        </div>
+        <div class="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden mt-1">
+          <div id="stat-health-bar" class="h-full bg-emerald-500 transition-all duration-500" style="width: 100%"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="flex items-center gap-2">
+      <span class="text-[10px] text-slate-400 border border-slate-800 px-2 py-1 rounded bg-slate-900 mono">DSA Graph: |V| = 8, |E| = 9</span>
+    </div>
+  </header>
+
+  <!-- Central Area: Left Sidebar + Canvas -->
+  <div class="flex-1 flex overflow-hidden">
+    <!-- Left Control Rail -->
+    <aside class="w-72 bg-[#090d16] border-r border-slate-800/80 flex flex-col shrink-0">
+      <div class="p-3.5 border-b border-slate-800/70">
+        <div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2 flex items-center justify-between">
+          <span>Primary Simulation</span>
+          <span class="w-2 h-2 rounded-full bg-rose-500"></span>
+        </div>
+        <button id="btn-blackout" class="w-full py-2 px-3 bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 text-white font-bold text-xs rounded-lg shadow-lg shadow-rose-900/30 flex items-center justify-between transition-all">
+          <span>Simulate Blackout (R3-R5)</span>
+          <span class="text-[10px] bg-rose-950/70 px-1.5 py-0.5 rounded border border-rose-700/60">FAILOVER</span>
+        </button>
+      </div>
+
+      <!-- Action Buttons -->
+      <div class="p-3 border-b border-slate-800/70 grid grid-cols-2 gap-2">
+        <button id="btn-bridges" class="py-1.5 px-2 bg-slate-800/70 hover:bg-slate-700 text-slate-300 font-semibold text-[11px] rounded border border-slate-700/60 flex items-center justify-center gap-1.5">
+          <span class="w-2 h-2 rounded-full bg-amber-400"></span> Tarjan Bridges
+        </button>
+        <button id="btn-cuts" class="py-1.5 px-2 bg-slate-800/70 hover:bg-slate-700 text-slate-300 font-semibold text-[11px] rounded border border-slate-700/60 flex items-center justify-center gap-1.5">
+          <span class="w-2 h-2 rounded-full bg-orange-400"></span> Cut Vertices
+        </button>
+        <button id="btn-bfs" class="py-1.5 px-2 bg-slate-800/70 hover:bg-slate-700 text-slate-300 font-semibold text-[11px] rounded border border-slate-700/60 flex items-center justify-center gap-1.5">
+          <span class="w-2 h-2 rounded-full bg-cyan-400"></span> BFS Order
+        </button>
+        <button id="btn-dfs" class="py-1.5 px-2 bg-slate-800/70 hover:bg-slate-700 text-slate-300 font-semibold text-[11px] rounded border border-slate-700/60 flex items-center justify-center gap-1.5">
+          <span class="w-2 h-2 rounded-full bg-blue-400"></span> DFS Order
+        </button>
+        <button id="btn-recover" class="col-span-2 py-1.5 bg-slate-900 hover:bg-slate-800 text-slate-300 font-semibold text-[11px] rounded border border-slate-800 flex items-center justify-center gap-1.5">
+          <svg class="w-3.5 h-3.5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+          Recover All Links
+        </button>
+      </div>
+
+      <!-- Edge Toggle Control List -->
+      <div class="flex-1 overflow-y-auto p-3 space-y-1.5" id="edge-controls-list">
+        <!-- Rendered dynamically -->
+      </div>
+    </aside>
+
+    <!-- Main Interactive Canvas -->
+    <main class="flex-1 flex flex-col relative bg-[#06090f] overflow-hidden">
+      <svg id="network-svg" class="w-full h-full min-h-[420px]" viewBox="0 0 1000 540">
+        <defs>
+          <filter id="cyanGlow" x="-20%" y="-20%" width="140%" height="140%">
+            <feGaussianBlur stdDeviation="6" result="blur" />
+            <feComposite in="SourceGraphic" in2="blur" operator="over" />
+          </filter>
+        </defs>
+        <!-- Edges Layer -->
+        <g id="edges-layer"></g>
+        <!-- Nodes Layer -->
+        <g id="nodes-layer"></g>
+      </svg>
+
+      <!-- Bottom Canvas Overlay Legend -->
+      <div class="absolute bottom-3 left-4 bg-[#090d16]/90 border border-slate-800/90 rounded-lg px-3.5 py-1.5 flex items-center gap-4 text-[11px] backdrop-blur-md">
+        <div class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span> Reachable</div>
+        <div class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-rose-500"></span> Isolated</div>
+        <div class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-amber-400"></span> Cut Vertex</div>
+        <div class="flex items-center gap-1.5"><span class="w-4 h-1 bg-cyan-400"></span> Dijkstra SPF Route</div>
+        <div class="flex items-center gap-1.5"><span class="w-4 h-1 bg-purple-400 border-dashed"></span> Redundant Backup</div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Bottom Diagnostics Console / Drawer -->
+  <footer class="h-44 bg-[#070a10] border-t border-slate-800 flex flex-col shrink-0">
+    <!-- Drawer Tabs -->
+    <div class="h-8 border-b border-slate-800/80 px-4 flex items-center justify-between text-xs bg-[#090d16]">
+      <div class="flex items-center gap-4 h-full">
+        <button id="tab-btn-logs" onclick="switchBottomTab('logs')" class="h-full border-b-2 font-semibold px-2 flex items-center gap-1.5 border-cyan-500 text-cyan-400">
+          <span>&gt;_ Live OSPF Event Log</span>
+        </button>
+        <button id="tab-btn-dsa" onclick="switchBottomTab('dsa')" class="h-full border-b-2 font-semibold px-2 flex items-center gap-1.5 border-transparent text-slate-400 hover:text-slate-200">
+          <span>&lt;/&gt; DSA Theory & Complexity</span>
+        </button>
+        <button id="tab-btn-cisco" onclick="switchBottomTab('cisco')" class="h-full border-b-2 font-semibold px-2 flex items-center gap-1.5 border-transparent text-slate-400 hover:text-slate-200">
+          <span>Cisco IOS Area 0 Configurations</span>
+        </button>
+      </div>
+
+      <div class="text-[11px] text-slate-500 mono">
+        Status: NORMAL_MONITORING
+      </div>
+    </div>
+
+    <!-- Tab Contents -->
+    <div class="flex-1 p-3 overflow-y-auto mono text-xs">
+      <div id="tab-content-logs" class="space-y-1"></div>
+      <div id="tab-content-dsa" class="text-slate-300 space-y-1 leading-relaxed hidden">
+        <div>• <strong class="text-cyan-400">Breadth-First Search (BFS):</strong> O(|V| + |E|) time. Queue-based level-order reachability inspection from source R1.</div>
+        <div>• <strong class="text-cyan-400">Tarjan's Bridge Algorithm:</strong> O(|V| + |E|) time. Identifies cut-edges where low[child] &gt; tin[u].</div>
+        <div>• <strong class="text-cyan-400">Tarjan's Articulation Points:</strong> O(|V| + |E|) time. Evaluates root children &ge; 2 and low[v] &ge; tin[u].</div>
+        <div>• <strong class="text-cyan-400">Dijkstra SPF Failover:</strong> O(|E| log |V|) via binary min-heap. Automatically pivots from primary uplink (cost 4) to backup R2-R5 (cost 7).</div>
+      </div>
+      <div id="tab-content-cisco" class="text-slate-400 text-[11px] space-y-1 hidden">
+        <div class="text-emerald-400">! Cisco Packet Tracer Area 0 Link Configurations:</div>
+        <div>router ospf 1</div>
+        <div> network 10.0.12.0 0.0.0.3 area 0  ! R1-R2 Inter-router link</div>
+        <div> network 10.0.23.0 0.0.0.3 area 0  ! R2-R3 Inter-router link</div>
+        <div> network 10.0.35.0 0.0.0.3 area 0  ! R3-R5 Primary Uplink (Metric 1)</div>
+        <div> network 10.0.25.0 0.0.0.3 area 0  ! R2-R5 Redundant Backup Trunk (Metric 5)</div>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    // State
+    const NODES = [
+      { id: "R1", label: "Router 1", type: "router", role: "Edge Router", x: 120, y: 240, ip: "10.0.12.1" },
+      { id: "R2", label: "Router 2", type: "router", role: "Distribution", x: 310, y: 110, ip: "10.0.23.1" },
+      { id: "R3", label: "Router 3", type: "router", role: "Core Router", x: 540, y: 140, ip: "10.0.35.1" },
+      { id: "R4", label: "Router 4", type: "router", role: "Branch Router", x: 420, y: 380, ip: "10.0.34.2" },
+      { id: "R5", label: "Router 5", type: "router", role: "Services Core", x: 770, y: 240, ip: "10.0.35.2" },
+      { id: "PC1", label: "PC1", type: "host", role: "Client LAN", x: 60, y: 410, ip: "192.168.10.10" },
+      { id: "PC2", label: "PC2", type: "host", role: "Branch LAN", x: 420, y: 500, ip: "192.168.40.10" },
+      { id: "Server1", label: "Server1", type: "server", role: "Mission Critical", x: 910, y: 240, ip: "192.168.50.10" }
+    ];
+
+    const EDGES = [
+      { u: "R1", v: "R2", cost: 1, backup: false, name: "R1 ↔ R2", subnet: "10.0.12.0/30" },
+      { u: "R2", v: "R3", cost: 1, backup: false, name: "R2 ↔ R3", subnet: "10.0.23.0/30" },
+      { u: "R3", v: "R4", cost: 1, backup: false, name: "R3 ↔ R4", subnet: "10.0.34.0/30" },
+      { u: "R4", v: "R1", cost: 1, backup: false, name: "R4 ↔ R1", subnet: "10.0.14.0/30" },
+      { u: "R3", v: "R5", cost: 1, backup: false, name: "R3 ↔ R5 PRIMARY", subnet: "10.0.35.0/30" },
+      { u: "R2", v: "R5", cost: 5, backup: true, name: "R2 ↔ R5 BACKUP", subnet: "10.0.25.0/30" },
+      { u: "R1", v: "PC1", cost: 1, backup: false, name: "R1 ↔ PC1", subnet: "192.168.10.0/24" },
+      { u: "R4", v: "PC2", cost: 1, backup: false, name: "R4 ↔ PC2", subnet: "192.168.40.0/24" },
+      { u: "R5", v: "Server1", cost: 1, backup: false, name: "R5 ↔ Server1", subnet: "192.168.50.0/24" }
+    ];
+
+    const failedEdges = new Set();
+    let activePath = [];
+    let pathCost = 0;
+    let bridges = new Set();
+    let cutVertices = new Set();
+    const logs = [];
+
+    function edgeKey(u, v) {
+      return [u, v].sort().join("-");
+    }
+
+    function addLog(msg, tag = "INFO", tagClass = "text-cyan-400 bg-cyan-950/60 border-cyan-800/60") {
+      const d = new Date();
+      const time = d.toTimeString().split(' ')[0] + '.' + String(d.getMilliseconds()).padStart(3, '0');
+      logs.unshift({ time, tag, tagClass, msg });
+      if (logs.length > 100) logs.pop();
+      renderLogs();
+    }
+
+    function renderLogs() {
+      const container = document.getElementById("tab-content-logs");
+      container.innerHTML = logs.map(l => `
+        <div class="flex items-start gap-2.5">
+          <span class="text-slate-600">[${l.time}]</span>
+          <span class="px-1.5 py-0.2 rounded text-[10px] font-bold border ${l.tagClass}">${l.tag}</span>
+          <span class="text-slate-300">${l.msg}</span>
+        </div>
+      `).join("");
+    }
+
+    function switchBottomTab(tab) {
+      ["logs", "dsa", "cisco"].forEach(t => {
+        const btn = document.getElementById(`tab-btn-${t}`);
+        const content = document.getElementById(`tab-content-${t}`);
+        if (t === tab) {
+          btn.className = "h-full border-b-2 font-semibold px-2 flex items-center gap-1.5 border-cyan-500 text-cyan-400";
+          content.classList.remove("hidden");
+        } else {
+          btn.className = "h-full border-b-2 font-semibold px-2 flex items-center gap-1.5 border-transparent text-slate-400 hover:text-slate-200";
+          content.classList.add("hidden");
+        }
+      });
+    }
+
+    // Graph Algorithms
+    function runAlgorithms() {
+      const adj = {};
+      NODES.forEach(n => adj[n.id] = []);
+      EDGES.forEach(e => {
+        const key = edgeKey(e.u, e.v);
+        if (!failedEdges.has(key)) {
+          adj[e.u].push({ neighbor: e.v, cost: e.cost });
+          adj[e.v].push({ neighbor: e.u, cost: e.cost });
+        }
+      });
+
+      // 1. Dijkstra from R1 to Server1
+      const distances = {};
+      const previous = {};
+      const pq = [{ node: "R1", dist: 0 }];
+      NODES.forEach(n => distances[n.id] = Infinity);
+      distances["R1"] = 0;
+
+      while (pq.length > 0) {
+        pq.sort((a, b) => a.dist - b.dist);
+        const { node: curr, dist } = pq.shift();
+        if (dist > distances[curr]) continue;
+        if (curr === "Server1") break;
+
+        for (const { neighbor, cost } of adj[curr] || []) {
+          const alt = dist + cost;
+          if (alt < distances[neighbor]) {
+            distances[neighbor] = alt;
+            previous[neighbor] = curr;
+            pq.push({ node: neighbor, dist: alt });
+          }
+        }
+      }
+
+      if (distances["Server1"] !== Infinity) {
+        const path = ["Server1"];
+        while (path[path.length - 1] !== "R1") {
+          path.push(previous[path[path.length - 1]]);
+        }
+        path.reverse();
+        activePath = path;
+        pathCost = distances["Server1"];
+      } else {
+        activePath = [];
+        pathCost = Infinity;
+      }
+
+      // 2. Tarjan Bridges & Articulation Points
+      let timer = 0;
+      const tin = {}, low = {};
+      bridges = new Set();
+      cutVertices = new Set();
+
+      function dfs(u, p = null) {
+        tin[u] = low[u] = timer++;
+        let children = 0;
+        for (const { neighbor: v } of adj[u] || []) {
+          if (v === p) continue;
+          if (tin[v] !== undefined) {
+            low[u] = Math.min(low[u], tin[v]);
+          } else {
+            children++;
+            dfs(v, u);
+            low[u] = Math.min(low[u], low[v]);
+            if (low[v] > tin[u]) {
+              bridges.add(edgeKey(u, v));
+            }
+            if (p !== null && low[v] >= tin[u]) {
+              cutVertices.add(u);
+            }
+          }
+        }
+        if (p === null && children >= 2) {
+          cutVertices.add(u);
+        }
+      }
+
+      NODES.forEach(n => {
+        if (tin[n.id] === undefined) dfs(n.id);
+      });
+
+      updateUI();
+    }
+
+    function isReachable(targetId) {
+      const q = ["R1"];
+      const visited = new Set(["R1"]);
+      while (q.length > 0) {
+        const curr = q.shift();
+        if (curr === targetId) return true;
+        EDGES.forEach(e => {
+          if (failedEdges.has(edgeKey(e.u, e.v))) return;
+          if (e.u === curr && !visited.has(e.v)) { visited.add(e.v); q.push(e.v); }
+          if (e.v === curr && !visited.has(e.u)) { visited.add(e.u); q.push(e.u); }
+        });
+      }
+      return false;
+    }
+
+    function toggleLink(u, v) {
+      const key = edgeKey(u, v);
+      if (failedEdges.has(key)) {
+        failedEdges.delete(key);
+        addLog(`CIRCUIT RECONSTITUTED: Link ${u} ↔ ${v} set to UP.`, "SUCCESS", "text-emerald-400 bg-emerald-950/60 border-emerald-800/60");
+      } else {
+        failedEdges.add(key);
+        addLog(`CIRCUIT SEVERED: Link ${u} ↔ ${v} is DOWN.`, "CRITICAL", "text-rose-400 bg-rose-950/60 border-rose-800/60");
+      }
+      runAlgorithms();
+    }
+
+    function simulateBlackout() {
+      const key = edgeKey("R3", "R5");
+      failedEdges.add(key);
+      addLog("BLACKOUT TRIGGERED: Primary trunk R3-R5 (10.0.35.0/30) collapsed.", "CRITICAL", "text-rose-400 bg-rose-950/60 border-rose-800/60");
+      addLog("OSPF FLOODING: Recalculating SPF; traffic dynamically rerouted via R2-R5 backup link.", "ROUTING", "text-cyan-400 bg-cyan-950/60 border-cyan-800/60");
+      runAlgorithms();
+    }
+
+    function recoverAll() {
+      failedEdges.clear();
+      addLog("SEQUENTIAL RECOVERY INITIALIZED: Restored all failed links to nominal.", "SYSTEM", "text-blue-400 bg-blue-950/60 border-blue-800/60");
+      runAlgorithms();
+    }
+
+    function updateUI() {
+      // 1. Telemetry
+      const routeTxt = activePath.length ? activePath.join(" → ") : "BLACKOUT (Unreachable)";
+      document.getElementById("stat-route").innerHTML = `
+        <span class="w-1.5 h-1.5 rounded-full ${activePath.length ? 'bg-cyan-400 animate-ping' : 'bg-rose-500'}"></span>
+        <span>${routeTxt}</span>
+      `;
+      document.getElementById("stat-cost").textContent = pathCost !== Infinity ? `${pathCost} (Active Path)` : "INF (Blackout)";
+      document.getElementById("stat-bridges").textContent = `${bridges.size} Cut-Edges`;
+      document.getElementById("stat-cuts").textContent = `${cutVertices.size} Cut-Nodes`;
+
+      const health = Math.round(((EDGES.length - failedEdges.size) / EDGES.length) * 100);
+      document.getElementById("stat-health-txt").textContent = `${health}%`;
+      const bar = document.getElementById("stat-health-bar");
+      bar.style.width = `${health}%`;
+      bar.className = `h-full transition-all duration-500 ${health > 75 ? 'bg-emerald-500' : (health > 40 ? 'bg-amber-500' : 'bg-rose-500')}`;
+
+      // 2. Render Left Edge list
+      const edgeList = document.getElementById("edge-controls-list");
+      edgeList.innerHTML = EDGES.map(e => {
+        const key = edgeKey(e.u, e.v);
+        const isDown = failedEdges.has(key);
+        return `
+          <div class="p-2 rounded-lg border flex items-center justify-between text-xs transition-all ${isDown ? 'bg-rose-950/20 border-rose-900/50' : 'bg-slate-900/60 border-slate-800 hover:border-slate-700'}">
+            <div>
+              <div class="font-semibold text-slate-200 flex items-center gap-1.5">
+                ${e.name}
+                ${e.backup ? '<span class="text-[9px] px-1 py-0.2 bg-purple-950 text-purple-300 border border-purple-800 rounded">BACKUP</span>' : ''}
+              </div>
+              <div class="text-[10px] text-slate-400 mono">Cost: ${e.cost} • ${e.subnet}</div>
+            </div>
+            <button onclick="toggleLink('${e.u}', '${e.v}')" class="px-2.5 py-1 rounded text-[10px] font-bold transition-all ${isDown ? 'bg-rose-600 hover:bg-rose-500 text-white' : 'bg-emerald-600 hover:bg-emerald-500 text-white'}">
+              ${isDown ? 'DOWN' : 'UP'}
+            </button>
+          </div>
+        `;
+      }).join("");
+
+      // 3. Render SVG Edges
+      const edgesLayer = document.getElementById("edges-layer");
+      edgesLayer.innerHTML = EDGES.map(e => {
+        const uNode = NODES.find(n => n.id === e.u);
+        const vNode = NODES.find(n => n.id === e.v);
+        const key = edgeKey(e.u, e.v);
+        const isFailed = failedEdges.has(key);
+        const isBridge = bridges.has(key);
+        const onRoute = activePath.some((node, i) => 
+          (node === e.u && activePath[i+1] === e.v) || (node === e.v && activePath[i+1] === e.u)
+        );
+
+        let strokeColor = "#334155";
+        let strokeWidth = 2;
+        let strokeDash = "";
+
+        if (isFailed) {
+          strokeColor = "#ef4444";
+          strokeDash = "6 6";
+          strokeWidth = 3;
+        } else if (onRoute) {
+          strokeColor = "#06b6d4";
+          strokeWidth = 5;
+        } else if (isBridge) {
+          strokeColor = "#f59e0b";
+          strokeWidth = 4;
+        } else if (e.backup) {
+          strokeColor = "#a855f7";
+          strokeDash = "5 4";
+        }
+
+        const mx = (uNode.x + vNode.x) / 2;
+        const my = (uNode.y + vNode.y) / 2;
+
+        return `
+          <g class="cursor-pointer" onclick="toggleLink('${e.u}', '${e.v}')">
+            <line x1="${uNode.x}" y1="${uNode.y}" x2="${vNode.x}" y2="${vNode.y}" 
+                  stroke="${strokeColor}" stroke-width="${strokeWidth}" stroke-dasharray="${strokeDash}"
+                  ${onRoute && !isFailed ? 'filter="url(#cyanGlow)"' : ''} />
+            <line x1="${uNode.x}" y1="${uNode.y}" x2="${vNode.x}" y2="${vNode.y}" stroke="transparent" stroke-width="22" />
+            <rect x="${mx - 18}" y="${my - 9}" width="36" height="18" rx="5" fill="#090d16" stroke="${strokeColor}" stroke-width="1" />
+            <text x="${mx}" y="${my + 3.5}" text-anchor="middle" fill="#cbd5e1" font-size="9.5" font-weight="600" class="mono">
+              ${isFailed ? 'DOWN' : 'C:' + e.cost}
+            </text>
+          </g>
+        `;
+      }).join("");
+
+      // 4. Render SVG Nodes
+      const nodesLayer = document.getElementById("nodes-layer");
+      nodesLayer.innerHTML = NODES.map(n => {
+        const online = isReachable(n.id);
+        const isCut = cutVertices.has(n.id);
+        const isDest = n.id === "Server1";
+
+        let fillColor = "#111827";
+        let borderColor = "#475569";
+
+        if (!online) {
+          fillColor = "#3f0d12";
+          borderColor = "#ef4444";
+        } else if (isDest) {
+          fillColor = "#042f2e";
+          borderColor = "#14b8a6";
+        } else if (online) {
+          fillColor = "#062e24";
+          borderColor = "#10b981";
+        }
+
+        return `
+          <g transform="translate(${n.x}, ${n.y})" class="cursor-move select-none" onmousedown="startDrag('${n.id}', event)">
+            ${isCut && online ? `<circle r="32" fill="none" stroke="#f59e0b" stroke-width="2" stroke-dasharray="5 5" class="spin-halo" />` : ''}
+            <circle r="23" fill="${fillColor}" stroke="${isCut ? '#f59e0b' : borderColor}" stroke-width="2.5" class="shadow-lg" />
+            <text text-anchor="middle" y="4.5" fill="#f8fafc" font-size="11" font-weight="700">${n.id}</text>
+            <g transform="translate(0, 32)">
+              <rect x="-38" y="-10" width="76" height="20" rx="5" fill="#090d16" stroke="#1e293b" stroke-width="1" />
+              <text text-anchor="middle" y="3.5" fill="#94a3b8" font-size="9" font-weight="600">${n.label}</text>
+            </g>
+          </g>
+        `;
+      }).join("");
+    }
+
+    // Node Dragging
+    let draggingNodeId = null;
+    let dragOffset = { x: 0, y: 0 };
+    const svgEl = document.getElementById("network-svg");
+
+    function startDrag(id, e) {
+      draggingNodeId = id;
+      const node = NODES.find(n => n.id === id);
+      const rect = svgEl.getBoundingClientRect();
+      dragOffset = { x: e.clientX - rect.left - node.x, y: e.clientY - rect.top - node.y };
+    }
+
+    window.addEventListener("mousemove", (e) => {
+      if (!draggingNodeId) return;
+      const rect = svgEl.getBoundingClientRect();
+      const node = NODES.find(n => n.id === draggingNodeId);
+      node.x = Math.max(30, Math.min(960, e.clientX - rect.left - dragOffset.x));
+      node.y = Math.max(30, Math.min(520, e.clientY - rect.top - dragOffset.y));
+      updateUI();
+    });
+
+    window.addEventListener("mouseup", () => draggingNodeId = null);
+
+    // Event listeners
+    document.getElementById("btn-blackout").addEventListener("click", simulateBlackout);
+    document.getElementById("btn-recover").addEventListener("click", recoverAll);
+    document.getElementById("btn-bridges").addEventListener("click", () => {
+      addLog(`Tarjan detected ${bridges.size} bridge edges.`, "ANALYSIS", "text-amber-400 bg-amber-950 border-amber-800");
+    });
+    document.getElementById("btn-cuts").addEventListener("click", () => {
+      addLog(`Tarjan detected ${cutVertices.size} cut vertices: ${Array.from(cutVertices).join(", ")}.`, "ANALYSIS", "text-orange-400 bg-orange-950 border-orange-800");
+    });
+    document.getElementById("btn-bfs").addEventListener("click", () => {
+      const q = ["R1"], visited = new Set(["R1"]), order = [];
+      while (q.length > 0) {
+        const curr = q.shift();
+        order.push(curr);
+        EDGES.forEach(e => {
+          if (failedEdges.has(edgeKey(e.u, e.v))) return;
+          const neighbor = e.u === curr ? e.v : (e.v === curr ? e.u : null);
+          if (neighbor && !visited.has(neighbor)) { visited.add(neighbor); q.push(neighbor); }
+        });
+      }
+      addLog(`BFS Traversal Sequence: ${order.join(" → ")} (${visited.size}/${NODES.length} reached)`, "ALGORITHM", "text-emerald-400 bg-emerald-950/60 border-emerald-800/60");
+    });
+    document.getElementById("btn-dfs").addEventListener("click", () => {
+      const stack = ["R1"], visited = new Set(), order = [];
+      while (stack.length > 0) {
+        const curr = stack.pop();
+        if (visited.has(curr)) continue;
+        visited.add(curr);
+        order.push(curr);
+        const neighbors = [];
+        EDGES.forEach(e => {
+          if (failedEdges.has(edgeKey(e.u, e.v))) return;
+          if (e.u === curr) neighbors.push(e.v);
+          if (e.v === curr) neighbors.push(e.u);
+        });
+        neighbors.reverse().forEach(n => { if (!visited.has(n)) stack.push(n); });
+      }
+      addLog(`DFS Traversal Sequence: ${order.join(" → ")}`, "ALGORITHM", "text-emerald-400 bg-emerald-950/60 border-emerald-800/60");
+    });
+
+    // Boot
+    addLog("Network Blackout Analyzer NOC online. OSPF Area 0 initialized.", "SYSTEM", "text-blue-400 bg-blue-950/60 border-blue-800/60");
+    addLog("Core ring established (R1-R2-R3-R4). Primary uplink active via R3-R5.", "INFO", "text-slate-300 bg-slate-800 border-slate-700");
+    addLog("Backup trunk R2-R5 primed with cost 5 (dormant standby path).", "ROUTING", "text-purple-400 bg-purple-950/60 border-purple-800/60");
+    runAlgorithms();
+  </script>
+</body>
+</html>
