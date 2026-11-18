@@ -43,6 +43,7 @@ class Graph:
         self.adj: dict[str, set[str]] = {node: set() for node in nodes}
         self.weights: dict[tuple[str, str], float] = {}
         self.failed_edges: set[tuple[str, str]] = set()
+        self.failed_nodes: set[str] = set()
         self.backup_edges: set[tuple[str, str]] = set()
 
     def add_node(self, node: str) -> None:
@@ -84,14 +85,26 @@ class Graph:
     def edge_is_up(self, u: str, v: str) -> bool:
         return edge_key(u, v) not in self.failed_edges
 
+    def toggle_node(self, node: str) -> bool:
+        """Toggle a node's simulated operational state; return True if now UP."""
+        if node not in self.adj:
+            raise ValueError(f"Unknown node: {node}")
+        if node in self.failed_nodes:
+            self.failed_nodes.remove(node)
+            return True
+        self.failed_nodes.add(node)
+        return False
+
     def neighbors(self, node: str):
+        if node in self.failed_nodes:
+            return
         for neighbor in sorted(self.adj.get(node, ())):
-            if edge_key(node, neighbor) not in self.failed_edges:
+            if neighbor not in self.failed_nodes and edge_key(node, neighbor) not in self.failed_edges:
                 yield neighbor
 
     def bfs(self, start: str) -> tuple[list[str], set[str]]:
         """Breadth-First Search: returns visit order and set of reachable nodes."""
-        if start not in self.adj:
+        if start not in self.adj or start in self.failed_nodes:
             return [], set()
         order, seen = [], {start}
         queue = deque([start])
@@ -106,7 +119,7 @@ class Graph:
 
     def dfs(self, start: str) -> tuple[list[str], set[str]]:
         """Depth-First Search: returns visit order and set of reachable nodes."""
-        if start not in self.adj:
+        if start not in self.adj or start in self.failed_nodes:
             return [], set()
         order, seen = [], set()
         stack = [start]
@@ -149,7 +162,7 @@ class Graph:
                         bridges.append(edge_key(node, neighbor))
 
         for node in sorted(self.adj):
-            if node not in tin:
+            if node not in self.failed_nodes and node not in tin:
                 visit(node, None)
         return sorted(set(bridges))
 
@@ -186,13 +199,14 @@ class Graph:
                 cut_vertices.add(node)
 
         for node in sorted(self.adj):
-            if node not in tin:
+            if node not in self.failed_nodes and node not in tin:
                 visit(node, None)
         return sorted(cut_vertices)
 
     def find_shortest_path(self, start: str, target: str) -> tuple[list[str] | None, float]:
         """Dijkstra's shortest path algorithm; backup link has a higher cost."""
-        if start not in self.adj or target not in self.adj:
+        if (start not in self.adj or target not in self.adj
+                or start in self.failed_nodes or target in self.failed_nodes):
             return None, float("inf")
         distances = {node: float("inf") for node in self.adj}
         previous: dict[str, str] = {}

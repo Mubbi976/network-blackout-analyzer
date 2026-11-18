@@ -22,6 +22,7 @@ class NetworkBlackoutApp:
             self.graph.add_edge(u, v, weight, backup)
 
         self.edge_vars: dict[tuple[str, str], tk.BooleanVar] = {}
+        self.router_vars: dict[str, tk.BooleanVar] = {}
         self.last_path: list[str] = []
         self.last_bridges: set[tuple[str, str]] = set()
         self.last_articulations: set[str] = set()
@@ -67,6 +68,18 @@ class NetworkBlackoutApp:
                 command=lambda a=u, b=v, value=var: self.on_link_toggle(a, b, value)
             )
             cb.pack(anchor="w")
+
+        ttk.Label(right, text="ROUTER STATUS (uncheck = DOWN)",
+                  font=("Segoe UI", 10, "bold")).pack(anchor="w", pady=(2, 0))
+        router_box = ttk.Frame(right)
+        router_box.pack(fill="x", pady=(2, 6))
+        for router in (node for node in NODES if node.startswith("R")):
+            var = tk.BooleanVar(value=True)
+            self.router_vars[router] = var
+            ttk.Checkbutton(
+                router_box, text=router, variable=var,
+                command=lambda name=router, value=var: self.on_router_toggle(name, value)
+            ).pack(side="left", padx=(0, 8))
 
         ttk.Separator(right).pack(fill="x", pady=5)
         buttons = [
@@ -118,6 +131,14 @@ class NetworkBlackoutApp:
         else:
             self.graph.failed_edges.add(key)
             self.log(f"LINK DOWN: {u} — {v}")
+        self.last_path = []
+        self.last_bridges.clear()
+        self.last_articulations.clear()
+        self.refresh_view()
+
+    def on_router_toggle(self, router, variable):
+        is_up = self.graph.toggle_node(router)
+        self.log(f"ROUTER {'UP' if is_up else 'DOWN'}: {router}")
         self.last_path = []
         self.last_bridges.clear()
         self.last_articulations.clear()
@@ -205,6 +226,7 @@ class NetworkBlackoutApp:
 
     def analyze_current_failures(self):
         down = sorted(self.graph.failed_edges)
+        down_routers = sorted(self.graph.failed_nodes)
         order, reachable = self.graph.bfs("R1")
         offline = sorted(set(self.graph.adj) - reachable)
         path, cost = self.graph.find_shortest_path("R1", "Server1")
@@ -214,14 +236,17 @@ class NetworkBlackoutApp:
         self.refresh_view()
         down_text = ", ".join(f"{u}-{v}" for u, v in down) if down else "None"
         offline_text = ", ".join(offline) if offline else "None"
-        self.log(f"MULTI-LINK ANALYSIS: failed links = {down_text}.")
+        router_text = ", ".join(down_routers) if down_routers else "None"
+        self.log(f"MULTI-FAILURE ANALYSIS: failed routers = {router_text}; failed links = {down_text}.")
         self.log(f"REACHABILITY: {len(reachable)}/{len(self.graph.adj)} nodes reachable from R1; offline = {offline_text}.")
         if path:
             self.log(f"ROUTE STATUS: Server1 reachable via {' -> '.join(path)} (cost {cost:g}).")
-            self.status.set(f"{len(down)} failed link(s). Server1 reachable; route cost {cost:g}.")
+            failure_count = len(down) + len(down_routers)
+            self.status.set(f"{failure_count} failure(s). Server1 reachable; route cost {cost:g}.")
         else:
             self.log("ROUTE STATUS: Server1 is unreachable from R1.")
-            self.status.set(f"{len(down)} failed link(s). Server1 is unreachable.")
+            failure_count = len(down) + len(down_routers)
+            self.status.set(f"{failure_count} failure(s). Server1 is unreachable.")
 
     def animate_recovery(self):
         if getattr(self, "recovery_running", False):
@@ -262,14 +287,17 @@ class NetworkBlackoutApp:
 
     def reset_network(self):
         self.graph.failed_edges.clear()
+        self.graph.failed_nodes.clear()
         for var in self.edge_vars.values():
+            var.set(True)
+        for var in self.router_vars.values():
             var.set(True)
         self.last_path = []
         self.last_bridges.clear()
         self.last_articulations.clear()
         self.refresh_view()
-        self.status.set("All links restored.")
-        self.log("RESET: all network links restored.")
+        self.status.set("All routers and links restored.")
+        self.log("RESET: all routers and links restored.")
 
     def refresh_view(self):
         self.canvas.delete("all")
@@ -285,10 +313,13 @@ class NetworkBlackoutApp:
             x2, y2 = POSITIONS[v]
             key = edge_key(u, v)
             failed = key in self.graph.failed_edges
+            endpoint_down = u in self.graph.failed_nodes or v in self.graph.failed_nodes
             bridge = key in self.last_bridges
             on_path = key in path_edges
             if failed:
                 color, width, dash = "#dc2626", 3, (7, 4)
+            elif endpoint_down:
+                color, width, dash = "#64748b", 2, (2, 4)
             elif bridge:
                 color, width, dash = "#f59e0b", 5, ()
             elif on_path:
@@ -300,7 +331,12 @@ class NetworkBlackoutApp:
             self.canvas.create_line(x1, y1, x2, y2, fill=color, width=width,
                                     dash=dash, capstyle=tk.ROUND)
             mx, my = (x1 + x2) / 2, (y1 + y2) / 2
-            label = "DOWN" if failed else (f"cost {weight}" if backup else str(weight))
+            if failed:
+                label = "DOWN"
+            elif endpoint_down:
+                label = "OFFLINE"
+            else:
+                label = f"cost {weight}" if backup else str(weight)
             self.canvas.create_rectangle(mx - 25, my - 10, mx + 25, my + 10,
                                          fill="#f7f9fc", outline="")
             self.canvas.create_text(mx, my, text=label, fill="#334155",
@@ -308,8 +344,9 @@ class NetworkBlackoutApp:
 
         # Draw nodes
         for node, (x, y) in POSITIONS.items():
+            node_down = node in self.graph.failed_nodes
             is_cut = node in self.last_articulations
-            if node not in reachable:
+            if node_down or node not in reachable:
                 fill = "#dc2626"
             elif is_cut:
                 fill = "#d97706"  # Highlight articulation points in Amber/Gold
@@ -325,8 +362,9 @@ class NetworkBlackoutApp:
             outline_width = 3 if is_cut else 2
             self.canvas.create_oval(x - radius, y - radius, x + radius, y + radius,
                                     fill=fill, outline=outline_color, width=outline_width)
-            self.canvas.create_text(x, y, text=node, fill="white",
-                                    font=("Segoe UI", 10, "bold"))
+            node_label = f"{node}\nDOWN" if node_down else node
+            self.canvas.create_text(x, y, text=node_label, fill="white",
+                                    font=("Segoe UI", 8 if node_down else 10, "bold"))
 
         # Legend
         legend = [
@@ -342,17 +380,21 @@ class NetworkBlackoutApp:
                                    fill="#334155", font=("Segoe UI", 8))
             x += 105
 
-        up_count = len(self.graph.weights) - len(self.graph.failed_edges)
-        down_count = len(self.graph.failed_edges)
+        up_count = sum(
+            1 for u, v, _, _ in EDGE_DEFINITIONS
+            if edge_key(u, v) not in self.graph.failed_edges
+            and u not in self.graph.failed_nodes and v not in self.graph.failed_nodes
+        )
+        down_count = len(self.graph.weights) - up_count
         bridge_count = len(self.graph.find_bridges())
         cut_count = len(self.graph.find_articulation_points())
         path, cost = self.graph.find_shortest_path("R1", "Server1")
         route_text = f"Available (cost {cost:g})" if path else "UNREACHABLE"
         reachable_count = len(reachable)
         self.stats.set(
-            f"Nodes: {len(self.graph.adj)}\n"
+            f"Routers down: {len(self.graph.failed_nodes)}\n"
+            f"Nodes reachable from R1: {reachable_count}/{len(self.graph.adj)}\n"
             f"Links up: {up_count} | Links down: {down_count}\n"
-            f"Reachable from R1: {reachable_count}/{len(self.graph.adj)}\n"
             f"Active bridges: {bridge_count} | Cut vertices: {cut_count}\n"
             f"R1 → Server1: {route_text}"
         )

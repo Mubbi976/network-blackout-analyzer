@@ -44,6 +44,27 @@ class GraphAlgorithmTests(unittest.TestCase):
         self.assertEqual(["R1", "R2", "R5", "Server1"], path)
         self.assertEqual(7, cost)
 
+    def test_shortest_route_avoids_two_failed_routers(self):
+        self.graph.failed_nodes.update({"R3", "R4"})
+        path, cost = self.graph.find_shortest_path("R1", "Server1")
+        self.assertEqual(["R1", "R2", "R5", "Server1"], path)
+        self.assertEqual(7, cost)
+        self.assertNotIn("R3", self.graph.get_reachable_nodes("R1"))
+        self.assertNotIn("R4", self.graph.get_reachable_nodes("R1"))
+
+    def test_three_failed_routers_can_make_server_unreachable(self):
+        self.graph.failed_nodes.update({"R2", "R3", "R4"})
+        path, cost = self.graph.find_shortest_path("R1", "Server1")
+        self.assertIsNone(path)
+        self.assertEqual(float("inf"), cost)
+
+    def test_failed_source_router_has_no_reachable_nodes(self):
+        self.assertFalse(self.graph.toggle_node("R1"))
+        self.assertEqual(([], set()), self.graph.bfs("R1"))
+        self.assertEqual((None, float("inf")), self.graph.find_shortest_path("R1", "Server1"))
+        self.assertTrue(self.graph.toggle_node("R1"))
+        self.assertIsNotNone(self.graph.find_shortest_path("R1", "Server1")[0])
+
     def test_both_server_uplinks_failed_makes_server_unreachable(self):
         self.graph.failed_edges.update({edge_key("R3", "R5"), edge_key("R2", "R5")})
         path, cost = self.graph.find_shortest_path("R1", "Server1")
