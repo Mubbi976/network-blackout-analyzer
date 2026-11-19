@@ -4,6 +4,8 @@ from pathlib import Path
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+_PROJECT_ROOT = Path(__file__).resolve().parents[1]
+
 
 class Settings(BaseSettings):
     app_name: str = "Video Clipper"
@@ -16,6 +18,8 @@ class Settings(BaseSettings):
     temp_dir: Path = Path("temp")
     logs_dir: Path = Path("logs")
     model_cache_dir: Path = Path("models")
+    jobs_db_path: Path = _PROJECT_ROOT / "temp" / "jobs.sqlite3"
+    app_access_token: str | None = None
     whisper_model: str = "small"
     semantic_model: str = "sentence-transformers/all-MiniLM-L6-v2"
     max_workers: int = Field(default=2, ge=1, le=8)

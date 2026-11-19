@@ -1,10 +1,13 @@
+import hmac
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
-from fastapi.responses import FileResponse
+from fastapi import FastAPI, Request
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from loguru import logger
+from starlette.middleware.base import RequestResponseEndpoint
+from starlette.responses import Response
 
 from backend.config import get_settings
 from backend.routes.health import router as health_router
@@ -28,6 +31,26 @@ async def lifespan(_: FastAPI):
 
 
 app = FastAPI(title=settings.app_name, lifespan=lifespan)
+
+
+@app.middleware("http")
+async def require_access_token(
+    request: Request,
+    call_next: RequestResponseEndpoint,
+) -> Response:
+    token = settings.app_access_token
+    if token and request.url.path.startswith("/api/"):
+        expected = f"Bearer {token}"
+        provided = request.headers.get("authorization", "")
+        if not hmac.compare_digest(provided.encode("utf-8"), expected.encode("utf-8")):
+            return JSONResponse(
+                status_code=401,
+                content={"detail": "A valid application access key is required"},
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+    return await call_next(request)
+
+
 app.include_router(health_router)
 app.include_router(media_router)
 

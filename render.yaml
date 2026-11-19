@@ -1,0 +1,35 @@
+services:
+  - type: web
+    name: video-clipper
+    runtime: docker
+    plan: 1c-2g
+    region: singapore
+    dockerfilePath: ./video_clipper/Dockerfile
+    dockerContext: ./video_clipper
+    healthCheckPath: /health
+    autoDeployTrigger: commit
+    disk:
+      name: video-clipper-data
+      mountPath: /var/data
+      sizeGB: 25
+    envVars:
+      - key: PYTHONUNBUFFERED
+        value: "1"
+      - key: APP_ACCESS_TOKEN
+        generateValue: true
+      - key: DOWNLOADS_DIR
+        value: /var/data/downloads
+      - key: CLIPS_DIR
+        value: /var/data/clips
+      - key: TEMP_DIR
+        value: /var/data/temp
+      - key: LOGS_DIR
+        value: /var/data/logs
+      - key: MODEL_CACHE_DIR
+        value: /var/data/models
+      - key: JOBS_DB_PATH
+        value: /var/data/jobs.sqlite3
+      - key: WHISPER_MODEL
+        value: tiny
+      - key: MAX_WORKERS
+        value: "1"

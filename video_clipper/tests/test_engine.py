@@ -193,6 +193,39 @@ def test_background_job_exposes_result_and_progress() -> None:
         manager._executor.shutdown(wait=True)
 
 
+def test_persistent_jobs_survive_restart_and_mark_running_jobs_interrupted(tmp_path) -> None:
+    database_path = tmp_path / "jobs.sqlite3"
+    manager = JobManager(database_path=database_path)
+    interrupted = Job(id="interrupted-job", type="analysis", status="running")
+    manager._jobs[interrupted.id] = interrupted
+    manager._persist(interrupted)
+
+    def worker(_context):
+        return {"source_path": "downloads/source.mp4", "candidates": []}
+
+    try:
+        submitted = manager.submit("analysis", worker)
+        deadline = time.monotonic() + 5
+        job = manager.get(submitted.id)
+        while job["status"] not in {"completed", "failed"} and time.monotonic() < deadline:
+            time.sleep(0.01)
+            job = manager.get(submitted.id)
+        assert job["status"] == "completed"
+    finally:
+        manager._executor.shutdown(wait=True)
+
+    restarted = JobManager(database_path=database_path)
+    try:
+        restored = restarted.get(submitted.id)
+        stopped = restarted.get("interrupted-job")
+        assert restored["status"] == "completed"
+        assert restored["result"]["source_path"] == "downloads/source.mp4"
+        assert stopped["status"] == "failed"
+        assert stopped["stage"] == "Interrupted"
+    finally:
+        restarted._executor.shutdown(wait=True)
+
+
 def test_extraction_moves_result_and_reuses_identical_cached_download(
     tmp_path,
     monkeypatch,

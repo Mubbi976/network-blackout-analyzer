@@ -1,9 +1,13 @@
+from contextlib import closing, contextmanager
+import json
+import sqlite3
 import threading
 import uuid
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Callable
+from pathlib import Path
+from typing import Any, Callable, Iterator
 
 from loguru import logger
 
@@ -58,14 +62,111 @@ class JobCancelled(Exception):
 
 
 class JobManager:
-    def __init__(self) -> None:
+    def __init__(self, database_path: Path | None = None) -> None:
         self._lock = threading.RLock()
         self._jobs: dict[str, Job] = {}
         self._futures: dict[str, Future[Any]] = {}
+        self._database_path = database_path
         self._executor = ThreadPoolExecutor(
             max_workers=get_settings().max_workers,
             thread_name_prefix="clipper",
         )
+        if database_path is not None:
+            database_path.parent.mkdir(parents=True, exist_ok=True)
+            self._initialize_database()
+            self._load_jobs()
+
+    def _connect(self) -> sqlite3.Connection:
+        if self._database_path is None:
+            raise RuntimeError("Job persistence is not configured")
+        connection = sqlite3.connect(self._database_path, timeout=30)
+        connection.row_factory = sqlite3.Row
+        return connection
+
+    @contextmanager
+    def _connection(self) -> Iterator[sqlite3.Connection]:
+        with closing(self._connect()) as connection:
+            with connection:
+                yield connection
+
+    def _initialize_database(self) -> None:
+        with self._connection() as connection:
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS jobs (
+                    id TEXT PRIMARY KEY,
+                    type TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    progress REAL NOT NULL,
+                    stage TEXT NOT NULL,
+                    message TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    result_json TEXT,
+                    error TEXT
+                )
+                """
+            )
+
+    def _load_jobs(self) -> None:
+        with self._connection() as connection:
+            rows = connection.execute(
+                "SELECT * FROM jobs ORDER BY created_at DESC LIMIT 100"
+            ).fetchall()
+        for row in reversed(rows):
+            job = Job(
+                id=row["id"],
+                type=row["type"],
+                status=row["status"],
+                progress=row["progress"],
+                stage=row["stage"],
+                message=row["message"],
+                created_at=row["created_at"],
+                updated_at=row["updated_at"],
+                result=json.loads(row["result_json"]) if row["result_json"] else None,
+                error=row["error"],
+            )
+            if job.status in {"queued", "running"}:
+                job.status = "failed"
+                job.stage = "Interrupted"
+                job.message = "Processing was interrupted when the server restarted"
+                job.error = job.message
+                job.updated_at = datetime.now(timezone.utc).isoformat()
+            self._jobs[job.id] = job
+            self._persist(job)
+
+    def _persist(self, job: Job) -> None:
+        if self._database_path is None:
+            return
+        with self._connection() as connection:
+            connection.execute(
+                """
+                INSERT INTO jobs (
+                    id, type, status, progress, stage, message, created_at,
+                    updated_at, result_json, error
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    status = excluded.status,
+                    progress = excluded.progress,
+                    stage = excluded.stage,
+                    message = excluded.message,
+                    updated_at = excluded.updated_at,
+                    result_json = excluded.result_json,
+                    error = excluded.error
+                """,
+                (
+                    job.id,
+                    job.type,
+                    job.status,
+                    job.progress,
+                    job.stage,
+                    job.message,
+                    job.created_at,
+                    job.updated_at,
+                    json.dumps(job.result) if job.result is not None else None,
+                    job.error,
+                ),
+            )
 
     def submit(self, job_type: str, worker: Callable[[JobContext], dict[str, Any]]) -> Job:
         with self._lock:
@@ -81,8 +182,12 @@ class JobManager:
                 for old_id in completed[: len(self._jobs) - 80]:
                     self._jobs.pop(old_id, None)
                     self._futures.pop(old_id, None)
+                    if self._database_path is not None:
+                        with self._connection() as connection:
+                            connection.execute("DELETE FROM jobs WHERE id = ?", (old_id,))
             job = Job(id=str(uuid.uuid4()), type=job_type)
             self._jobs[job.id] = job
+            self._persist(job)
             self._futures[job.id] = self._executor.submit(self._run, job.id, worker)
             return job
 
@@ -167,6 +272,7 @@ class JobManager:
             if error is not None:
                 job.error = error
             job.updated_at = datetime.now(timezone.utc).isoformat()
+            self._persist(job)
 
     def cancel_event(self, job_id: str) -> threading.Event:
         with self._lock:
@@ -184,6 +290,7 @@ class JobManager:
                 job.stage = "Cancelled"
                 job.message = "Cancelled before processing started"
                 job.updated_at = datetime.now(timezone.utc).isoformat()
+                self._persist(job)
             return True
 
     def get(self, job_id: str) -> dict[str, Any] | None:
@@ -211,4 +318,4 @@ class JobManager:
         }
 
 
-job_manager = JobManager()
+job_manager = JobManager(database_path=get_settings().jobs_db_path)

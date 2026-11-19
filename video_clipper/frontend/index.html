@@ -250,18 +250,30 @@
       notice.style.display = "block";
     }
     function clearNotice() { $("notice").style.display = "none"; }
-    async function api(url, options = {}) {
+    async function api(url, options = {}, allowAuthenticationPrompt = true) {
       let response;
       try {
         response = await fetch(url, {
           ...options,
-          headers: { "Content-Type": "application/json", ...(options.headers || {}) }
+          headers: {
+            "Content-Type": "application/json",
+            ...(sessionStorage.getItem("video-clipper-access-key")
+              ? { "Authorization": `Bearer ${sessionStorage.getItem("video-clipper-access-key")}` }
+              : {}),
+            ...(options.headers || {})
+          }
         });
       } catch {
         if (location.hostname === "127.0.0.1" || location.hostname === "localhost") {
           throw new Error("Cannot reach the local Video Clipper server. Run Start-Video-Clipper.bat from the video_clipper folder, then retry.");
         }
         throw new Error("Cannot reach the Video Clipper API. Check the server connection and retry.");
+      }
+      if (response.status === 401 && allowAuthenticationPrompt) {
+        const accessKey = window.prompt("Enter the Video Clipper server access key:");
+        if (!accessKey || !accessKey.trim()) throw new Error("A server access key is required.");
+        sessionStorage.setItem("video-clipper-access-key", accessKey.trim());
+        return api(url, options, false);
       }
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) {

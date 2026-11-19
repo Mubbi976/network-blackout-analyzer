@@ -1,0 +1,17 @@
+.env
+.venv
+venv
+__pycache__
+.pytest_cache
+.git
+models
+downloads/*
+!downloads/.gitkeep
+clips/*
+!clips/.gitkeep
+temp/*
+!temp/.gitkeep
+logs/*
+!logs/.gitkeep
+tests
+requirements-dev.txt
