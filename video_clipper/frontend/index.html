@@ -1,0 +1,542 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Clip Studio | Video Clipper</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0b1016;
+      --panel: #121a23;
+      --panel-2: #17212c;
+      --line: #263341;
+      --muted: #91a1b1;
+      --text: #e8f0f7;
+      --accent: #61dfbd;
+      --accent-dark: #143b36;
+      --danger: #ff7b78;
+      font: 15px/1.5 Inter, ui-sans-serif, system-ui, "Segoe UI", sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      color: var(--text);
+      background: radial-gradient(ellipse at 75% -10%, #1b3b40 0, transparent 38%), var(--bg);
+      min-height: 100vh;
+    }
+    header {
+      max-width: 1180px;
+      margin: auto;
+      padding: 28px 28px 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid var(--line);
+    }
+    .brand { display: flex; align-items: center; gap: 12px; }
+    .brand-mark {
+      width: 38px; height: 38px; border-radius: 12px;
+      display: grid; place-items: center; color: #06120f;
+      background: var(--accent); font-weight: 900; font-size: 18px;
+    }
+    h1 { font-size: 18px; margin: 0; letter-spacing: -.03em; }
+    .brand p { margin: 0; color: var(--muted); font-size: 12px; }
+    .local-badge { color: var(--accent); font-size: 12px; border: 1px solid #28534e; padding: 5px 9px; border-radius: 20px; }
+    main { max-width: 1180px; margin: auto; padding: 34px 28px 80px; }
+    .intro { margin-bottom: 28px; }
+    .intro h2 { font-size: clamp(26px, 4vw, 38px); line-height: 1.15; margin: 0 0 10px; letter-spacing: -.04em; }
+    .intro p { color: var(--muted); max-width: 700px; margin: 0; }
+    .layout { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(300px, .9fr); gap: 18px; align-items: start; }
+    .panel { background: color-mix(in srgb, var(--panel) 94%, transparent); border: 1px solid var(--line); border-radius: 16px; padding: 22px; box-shadow: 0 16px 50px #0002; }
+    .panel + .panel { margin-top: 18px; }
+    .section-heading { display: flex; align-items: center; gap: 12px; margin-bottom: 19px; }
+    .step { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; color: var(--accent); background: var(--accent-dark); font-size: 12px; font-weight: 800; }
+    h3 { font-size: 16px; margin: 0; }
+    label { display: block; color: #bcc9d5; font-size: 12px; font-weight: 650; margin: 0 0 7px; }
+    input, select {
+      width: 100%; color: var(--text); background: #0e151d; border: 1px solid #314151;
+      border-radius: 9px; padding: 11px 12px; font: inherit; outline: none;
+    }
+    input:focus, select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px #61dfbd1a; }
+    input[type="checkbox"] { width: auto; accent-color: var(--accent); }
+    .field { margin-bottom: 16px; }
+    .row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+    .row.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .radio-row { display: flex; gap: 9px; margin-bottom: 18px; }
+    .radio-option { flex: 1; position: relative; }
+    .radio-option input { position: absolute; opacity: 0; width: 1px; }
+    .radio-option span { display: block; border: 1px solid var(--line); border-radius: 9px; padding: 10px 12px; text-align: center; color: var(--muted); cursor: pointer; }
+    .radio-option input:checked + span { border-color: var(--accent); color: var(--accent); background: #122722; }
+    .muted, .hint { color: var(--muted); font-size: 12px; }
+    .hint { margin: 6px 0 0; }
+    .button-row { display: flex; flex-wrap: wrap; gap: 9px; }
+    button {
+      border: 0; border-radius: 9px; padding: 10px 15px; color: #071411;
+      background: var(--accent); font: inherit; font-size: 13px; font-weight: 800; cursor: pointer;
+    }
+    button.secondary { color: var(--text); background: #263342; border: 1px solid #354656; }
+    button.danger { background: #492321; color: #ffaaa4; border: 1px solid #70403d; }
+    button:disabled { opacity: .43; cursor: not-allowed; }
+    .metadata { margin-top: 18px; display: none; padding: 14px; border-radius: 10px; background: var(--panel-2); }
+    .metadata strong { display: block; line-height: 1.35; }
+    .metadata img { width: 120px; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 7px; float: right; margin-left: 12px; }
+    .status-card { display: none; margin-top: 17px; padding: 15px; border: 1px solid var(--line); border-radius: 11px; background: #0e151d; }
+    .status-top { display: flex; justify-content: space-between; gap: 10px; align-items: center; }
+    .status-copy { min-width: 0; }
+    .status-copy strong { display: block; font-size: 13px; }
+    .status-copy span { color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
+    progress { width: 100%; height: 7px; margin-top: 13px; accent-color: var(--accent); }
+    .notice { display: none; padding: 11px 13px; margin: 14px 0 0; border-radius: 8px; background: #402321; color: #ffb3ad; font-size: 13px; }
+    .notice.success { background: #12312c; color: #9af0d4; }
+    .candidate { border: 1px solid var(--line); border-radius: 11px; padding: 14px; margin: 10px 0; background: #0e151d; }
+    .candidate-head { display: flex; gap: 11px; align-items: flex-start; }
+    .candidate-head input { margin-top: 5px; }
+    .candidate-head strong { font-size: 13px; display: block; }
+    .candidate-head p { color: var(--muted); font-size: 12px; margin: 3px 0 0; }
+    .candidate-controls { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding-left: 26px; margin-top: 12px; }
+    .candidate-controls .title-control { grid-column: 1/-1; }
+    .candidate-controls input { padding: 8px; font-size: 12px; }
+    .candidate-meta { padding-left: 26px; margin-top: 10px; font-size: 11px; color: var(--accent); }
+    .empty { color: var(--muted); font-size: 13px; border: 1px dashed #344251; padding: 17px; border-radius: 10px; }
+    .export-preview { display: none; margin-top: 16px; }
+    .export-preview video { width: min(260px, 100%); max-height: 460px; background: #000; border: 1px solid var(--line); border-radius: 9px; }
+    .exports a { color: var(--accent); display: inline-block; margin: 8px 8px 0 0; font-size: 12px; }
+    footer { max-width: 1180px; padding: 0 28px 35px; margin: auto; color: #778897; font-size: 11px; }
+    @media (max-width: 780px) {
+      header, main { padding-left: 16px; padding-right: 16px; }
+      .layout { grid-template-columns: 1fr; }
+      .row.three { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <div class="brand-mark">C</div>
+      <div><h1>Clip Studio</h1><p>AI-assisted short-form video workflow</p></div>
+    </div>
+    <span class="local-badge">Local processing</span>
+  </header>
+  <main>
+    <section class="intro">
+      <h2>Find the moment.<br>Make it a short.</h2>
+      <p>Retrieve authorized YouTube media, transcribe and rank meaningful moments, then render vertical clips with optional captions.</p>
+    </section>
+    <div class="layout">
+      <section>
+        <div class="panel">
+          <div class="section-heading"><span class="step">01</span><h3>Choose a source</h3></div>
+          <div class="radio-row">
+            <label class="radio-option"><input type="radio" name="mode" value="video" checked><span>YouTube video</span></label>
+            <label class="radio-option"><input type="radio" name="mode" value="live"><span>Public live stream</span></label>
+          </div>
+          <div class="field">
+            <label for="url">YouTube URL</label>
+            <input id="url" type="url" placeholder="https://www.youtube.com/watch?v=..." autocomplete="url">
+          </div>
+          <div id="recordingOptions" class="field" hidden>
+            <label for="recordSeconds">Maximum recording time (seconds)</label>
+            <input id="recordSeconds" type="number" min="10" max="86400" value="300">
+            <p class="hint">Starts at current authorized access; use Stop recording to end early.</p>
+          </div>
+          <div class="row">
+            <div class="field"><label for="quality">Maximum video quality</label>
+              <select id="quality"><option value="best">Best available</option><option value="1080">Up to 1080p</option><option value="720">Up to 720p</option><option value="480">Up to 480p</option></select>
+            </div>
+            <div class="field"><label for="sourceFormat">Saved format</label>
+              <select id="sourceFormat"><option value="mp4">MP4 video</option><option value="webm">WebM video</option><option value="mkv">MKV video</option><option value="mp3">MP3 audio only</option><option value="wav">WAV audio only</option></select>
+            </div>
+          </div>
+          <div class="button-row">
+            <button id="metadataButton">Retrieve metadata</button>
+            <button id="extractButton" class="secondary" disabled>Start extraction</button>
+          </div>
+          <div id="metadataCard" class="metadata"></div>
+          <div class="notice" id="notice"></div>
+          <div class="status-card" id="statusCard">
+            <div class="status-top">
+              <div class="status-copy"><strong id="statusStage">Waiting</strong><span id="statusMessage"></span></div>
+              <button id="cancelButton" class="danger" hidden>Cancel</button>
+            </div>
+            <progress id="progressBar" max="100" value="0"></progress>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="section-heading"><span class="step">02</span><h3>Analyze the content</h3></div>
+          <p class="muted">Transcribe speech with timestamps, then use sentence embeddings to rank educational, surprising, opinionated, humorous, Q&amp;A, and story moments.</p>
+          <div class="button-row"><button id="analyzeButton" disabled>Transcribe &amp; find moments</button></div>
+        </div>
+        <div class="panel">
+          <div class="section-heading"><span class="step">03</span><h3>Suggested moments</h3></div>
+          <div id="candidateList" class="empty">Complete transcription to review editable clip suggestions.</div>
+        </div>
+      </section>
+      <aside>
+        <div class="panel">
+          <div class="section-heading"><span class="step">04</span><h3>Export settings</h3></div>
+          <div class="field">
+            <label for="durationPreset">Clip duration</label>
+            <select id="durationPreset">
+              <option value="suggested">Use suggested times</option>
+              <option value="15">15 seconds</option>
+              <option value="30">30 seconds</option>
+              <option value="45">45 seconds</option>
+              <option value="60">60 seconds</option>
+              <option value="custom">Custom duration</option>
+            </select>
+          </div>
+          <div class="field" id="customDurationField" hidden>
+            <label for="customDuration">Custom length (seconds; up to 180)</label>
+            <input id="customDuration" type="number" min="8" max="180" value="30">
+          </div>
+          <div class="row">
+            <div class="field"><label for="framing">Vertical framing</label>
+              <select id="framing"><option value="center">Center crop</option><option value="smart">Smart face crop</option><option value="blurred">Blurred background</option></select>
+            </div>
+            <div class="field"><label for="resolution">Resolution</label>
+              <select id="resolution"><option value="1080x1920">1080 × 1920</option><option value="720x1280">720 × 1280</option></select>
+            </div>
+          </div>
+          <div class="field"><label for="preset">Export preset</label>
+            <select id="preset"><option value="instagram">Instagram Reels (MP4)</option><option value="youtube_shorts">YouTube Shorts (MP4)</option></select>
+          </div>
+          <div class="field">
+            <label><input id="snapToSentences" type="checkbox" checked> Adjust cuts to nearby sentence boundaries</label>
+          </div>
+          <div class="field">
+            <label><input id="subtitles" type="checkbox" checked> Burn in synchronized subtitles</label>
+          </div>
+          <div class="field">
+            <label><input id="highlightKeywords" type="checkbox" checked> Highlight key words</label>
+          </div>
+          <div class="row three">
+            <div class="field"><label for="subtitleStyle">Caption style</label>
+              <select id="subtitleStyle"><option value="minimal">Minimal</option><option value="professional" selected>Professional</option><option value="bold">Bold</option></select>
+            </div>
+            <div class="field"><label for="subtitleSize">Font size</label><input id="subtitleSize" type="number" min="18" max="96" value="52"></div>
+            <div class="field"><label for="subtitleColor">Color</label>
+              <input id="subtitleColor" type="color" value="#ffffff">
+            </div>
+          </div>
+          <div class="field"><label for="subtitlePosition">Subtitle position</label>
+            <select id="subtitlePosition"><option value="bottom">Bottom</option><option value="middle">Middle</option><option value="top">Top</option></select>
+          </div>
+          <div class="button-row"><button id="generateButton" disabled>Render selected clips</button></div>
+        </div>
+        <div class="panel export-preview" id="previewPanel">
+          <div class="section-heading"><span class="step">05</span><h3>Preview &amp; exports</h3></div>
+          <video id="previewVideo" controls playsinline></video>
+          <div class="exports" id="exportLinks"></div>
+        </div>
+      </aside>
+    </div>
+  </main>
+  <footer>Only process content you are authorized to use. This application does not access private streams, retrieve unavailable historical live footage, or bypass DRM/access controls.</footer>
+  <script>
+    const $ = (id) => document.getElementById(id);
+    let metadata = null;
+    let extractionJob = null;
+    let analysisJob = null;
+    let activeJob = null;
+    let pollTimer = null;
+    let analyzedDuration = null;
+    let recordingStartedAt = null;
+
+    function showNotice(message, success = false) {
+      const notice = $("notice");
+      notice.textContent = message;
+      notice.className = success ? "notice success" : "notice";
+      notice.style.display = "block";
+    }
+    function clearNotice() { $("notice").style.display = "none"; }
+    async function api(url, options = {}) {
+      let response;
+      try {
+        response = await fetch(url, {
+          ...options,
+          headers: { "Content-Type": "application/json", ...(options.headers || {}) }
+        });
+      } catch {
+        if (location.hostname === "127.0.0.1" || location.hostname === "localhost") {
+          throw new Error("Cannot reach the local Video Clipper server. Run Start-Video-Clipper.bat from the video_clipper folder, then retry.");
+        }
+        throw new Error("Cannot reach the Video Clipper API. Check the server connection and retry.");
+      }
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        const detail = Array.isArray(payload.detail)
+          ? payload.detail.map((item) => item.msg || JSON.stringify(item)).join("; ")
+          : typeof payload.detail === "string" ? payload.detail : `Request failed (${response.status})`;
+        throw new Error(detail);
+      }
+      return payload;
+    }
+    function selectedMode() {
+      return document.querySelector('input[name="mode"]:checked').value;
+    }
+    function setBusy(busy) {
+      $("metadataButton").disabled = busy;
+      $("extractButton").disabled = busy || !metadata;
+    }
+    document.querySelectorAll('input[name="mode"]').forEach((input) => {
+      input.addEventListener("change", () => {
+        $("recordingOptions").hidden = selectedMode() !== "live";
+        $("extractButton").textContent = selectedMode() === "live" ? "Start recording" : "Start extraction";
+        if (metadata) $("extractButton").disabled = false;
+      });
+    });
+    $("durationPreset").addEventListener("change", () => {
+      $("customDurationField").hidden = $("durationPreset").value !== "custom";
+    });
+    $("metadataButton").addEventListener("click", async () => {
+      clearNotice();
+      const url = $("url").value.trim();
+      if (!url) return showNotice("Enter a YouTube video or public live-stream URL.");
+      setBusy(true);
+      $("metadataCard").style.display = "none";
+      try {
+        metadata = await api("/api/metadata", { method: "POST", body: JSON.stringify({ url }) });
+        const card = $("metadataCard");
+        card.replaceChildren();
+        if (metadata.thumbnail) {
+          const image = document.createElement("img");
+          image.src = metadata.thumbnail;
+          image.alt = "";
+          card.append(image);
+        }
+        const title = document.createElement("strong");
+        title.textContent = metadata.title;
+        const details = document.createElement("span");
+        const length = metadata.duration ? `${Math.floor(metadata.duration / 60)}:${String(Math.floor(metadata.duration % 60)).padStart(2, "0")}` : "Live / duration unavailable";
+        details.textContent = `${metadata.channel || "Unknown channel"} · ${length} · ${metadata.formats.length} formats`;
+        card.append(title, details);
+        card.style.display = "block";
+        const heights = [...new Set(metadata.formats.map((format) => format.height).filter(Boolean))].sort((a, b) => b - a);
+        [...$("quality").options].forEach((option) => {
+          if (option.value === "best") return;
+          option.disabled = !heights.some((height) => height >= Number(option.value));
+        });
+        $("extractButton").disabled = false;
+        showNotice("Metadata retrieved. Select extraction options and continue.", true);
+      } catch (error) {
+        metadata = null;
+        $("extractButton").disabled = true;
+        showNotice(error.message);
+      } finally {
+        $("metadataButton").disabled = false;
+      }
+    });
+
+    $("extractButton").addEventListener("click", async () => {
+      clearNotice();
+      if (!metadata) return;
+      const mode = selectedMode();
+      const body = {
+        url: metadata.url,
+        quality: $("quality").value,
+        output_format: $("sourceFormat").value
+      };
+      if (mode === "live") {
+        body.live_duration_seconds = Number($("recordSeconds").value);
+        if (!Number.isInteger(body.live_duration_seconds) || body.live_duration_seconds < 10 || body.live_duration_seconds > 86400) {
+          return showNotice("Recording duration must be from 10 to 86,400 seconds.");
+        }
+        recordingStartedAt = Date.now();
+      }
+      try {
+        const endpoint = mode === "live" ? "/api/jobs/record" : "/api/jobs/extract";
+        extractionJob = await api(endpoint, { method: "POST", body: JSON.stringify(body) });
+        $("analyzeButton").disabled = true;
+        $("extractButton").disabled = true;
+        watchJob(extractionJob.id, "extract");
+      } catch (error) { showNotice(error.message); }
+    });
+
+    async function watchJob(id, kind) {
+      activeJob = { id, kind };
+      $("statusCard").style.display = "block";
+      $("cancelButton").hidden = false;
+      $("cancelButton").textContent = kind === "extract" && selectedMode() === "live" ? "Stop recording" : "Cancel";
+      if (pollTimer) clearInterval(pollTimer);
+      const poll = async () => {
+        try {
+          const job = await api(`/api/jobs/${encodeURIComponent(id)}`);
+          $("statusStage").textContent = `${job.type} · ${job.stage}`;
+          const elapsed = job.type === "recording" && recordingStartedAt
+            ? ` · ${Math.floor((Date.now() - recordingStartedAt) / 60)}:${String(Math.floor((Date.now() - recordingStartedAt) / 1000) % 60).padStart(2, "0")}`
+            : "";
+          $("statusMessage").textContent = `${job.message || ""}${elapsed}`;
+          $("progressBar").value = job.progress || 0;
+          if (job.status === "completed" || job.status === "failed" || job.status === "cancelled") {
+            clearInterval(pollTimer);
+            pollTimer = null;
+            $("cancelButton").hidden = true;
+            activeJob = null;
+            if (job.status === "failed") {
+              showNotice(job.error || "Processing failed.");
+            } else if (job.status === "cancelled") {
+              showNotice("Job cancelled.");
+            } else if (kind === "extract") {
+              extractionJob = job;
+              $("analyzeButton").disabled = false;
+              $("extractButton").disabled = false;
+              const suffix = job.result && job.result.partial ? " (partial live segment saved)" : "";
+              showNotice(`Media ready: ${job.result.filename}${suffix}`, true);
+            } else if (kind === "analyze") {
+              analysisJob = job;
+              renderCandidates(job.result);
+              showNotice("Transcription and semantic moment suggestions are ready.", true);
+            } else if (kind === "render") {
+              renderExports(job.result.clips || []);
+              showNotice("Rendering complete. Preview or open each MP4 export.", true);
+            }
+          }
+        } catch (error) {
+          clearInterval(pollTimer);
+          pollTimer = null;
+          activeJob = null;
+          $("cancelButton").hidden = true;
+          showNotice(error.message);
+        }
+      };
+      await poll();
+      if (activeJob) pollTimer = setInterval(poll, 1500);
+    }
+    $("cancelButton").addEventListener("click", async () => {
+      if (!activeJob) return;
+      $("cancelButton").disabled = true;
+      try { await api(`/api/jobs/${encodeURIComponent(activeJob.id)}/cancel`, { method: "POST" }); }
+      catch (error) { showNotice(error.message); }
+      finally { $("cancelButton").disabled = false; }
+    });
+    $("analyzeButton").addEventListener("click", async () => {
+      if (!extractionJob) return;
+      clearNotice();
+      $("analyzeButton").disabled = true;
+      try {
+        const job = await api(`/api/jobs/${encodeURIComponent(extractionJob.id)}/analyze`, {
+          method: "POST",
+          body: JSON.stringify({ max_candidates: 8 })
+        });
+        watchJob(job.id, "analyze");
+      } catch (error) {
+        $("analyzeButton").disabled = false;
+        showNotice(error.message);
+      }
+    });
+
+    function renderCandidates(result) {
+      const container = $("candidateList");
+      container.replaceChildren();
+      analyzedDuration = result.transcript.duration || metadata?.duration || null;
+      if (!result.candidates.length) {
+        container.className = "empty";
+        container.textContent = "No speech moments were detected. Check the source audio or try another Whisper model.";
+        return;
+      }
+      container.className = "";
+      result.candidates.forEach((candidate, index) => {
+        const card = document.createElement("article");
+        card.className = "candidate";
+        card.dataset.focusTime = candidate.focus_time;
+        const head = document.createElement("div");
+        head.className = "candidate-head";
+        const checkbox = document.createElement("input");
+        checkbox.type = "checkbox";
+        checkbox.checked = true;
+        checkbox.setAttribute("aria-label", `Select clip ${index + 1}`);
+        const text = document.createElement("div");
+        const title = document.createElement("strong");
+        title.textContent = candidate.title;
+        const excerpt = document.createElement("p");
+        excerpt.textContent = candidate.excerpt;
+        text.append(title, excerpt);
+        head.append(checkbox, text);
+        const controls = document.createElement("div");
+        controls.className = "candidate-controls";
+        const start = document.createElement("input");
+        start.type = "number"; start.min = "0"; start.step = "0.1"; start.value = candidate.start;
+        start.setAttribute("aria-label", "Clip start time in seconds");
+        const end = document.createElement("input");
+        end.type = "number"; end.min = "0.1"; end.step = "0.1"; end.value = candidate.end;
+        end.setAttribute("aria-label", "Clip end time in seconds");
+        const titleEdit = document.createElement("input");
+        titleEdit.type = "text"; titleEdit.maxLength = 120; titleEdit.value = candidate.title;
+        titleEdit.className = "title-control"; titleEdit.setAttribute("aria-label", "Editable clip title");
+        controls.append(start, end, titleEdit);
+        const meta = document.createElement("div");
+        meta.className = "candidate-meta";
+        meta.textContent = `${candidate.category} · ${Math.round(candidate.confidence * 100)}% confidence · ${candidate.reason}`;
+        card.append(head, controls, meta);
+        container.append(card);
+      });
+      $("generateButton").disabled = false;
+    }
+
+    $("generateButton").addEventListener("click", async () => {
+      if (!analysisJob) return;
+      const selected = [...$("candidateList").querySelectorAll(".candidate")]
+        .filter((card) => card.querySelector('input[type="checkbox"]').checked)
+        .map((card) => {
+          const inputs = card.querySelectorAll(".candidate-controls input");
+          let start = Number(inputs[0].value);
+          let end = Number(inputs[1].value);
+          const durationChoice = $("durationPreset").value;
+          if (durationChoice !== "suggested") {
+            const length = durationChoice === "custom" ? Number($("customDuration").value) : Number(durationChoice);
+            const focus = Number(card.dataset.focusTime);
+            start = Math.max(0, focus - length / 2);
+            end = Math.min(start + length, analyzedDuration || start + length);
+            if (end - start < length && end === analyzedDuration) start = Math.max(0, end - length);
+          }
+          return { start, end, title: inputs[2].value.trim() };
+        });
+      if (!selected.length) return showNotice("Select at least one suggested moment.");
+      if (selected.some((clip) => !clip.title || !Number.isFinite(clip.start) || !Number.isFinite(clip.end) || clip.end <= clip.start)) {
+        return showNotice("Each selected clip needs a title and an end time after its start.");
+      }
+      const body = {
+        clips: selected,
+        framing: $("framing").value,
+        resolution: $("resolution").value,
+        preset: $("preset").value,
+        snap_to_sentences: $("snapToSentences").checked,
+        subtitles: $("subtitles").checked,
+        highlight_keywords: $("highlightKeywords").checked,
+        subtitle_style: $("subtitleStyle").value,
+        subtitle_font_size: Number($("subtitleSize").value),
+        subtitle_color: $("subtitleColor").value,
+        subtitle_position: $("subtitlePosition").value
+      };
+      $("generateButton").disabled = true;
+      try {
+        const job = await api(`/api/jobs/${encodeURIComponent(analysisJob.id)}/clips`, {
+          method: "POST", body: JSON.stringify(body)
+        });
+        watchJob(job.id, "render");
+      } catch (error) {
+        $("generateButton").disabled = false;
+        showNotice(error.message);
+      }
+    });
+
+    function renderExports(clips) {
+      const panel = $("previewPanel");
+      const links = $("exportLinks");
+      links.replaceChildren();
+      if (!clips.length) return;
+      const preview = $("previewVideo");
+      preview.src = `/api/clips/${encodeURIComponent(clips[0].filename)}`;
+      clips.forEach((clip) => {
+        const link = document.createElement("a");
+        link.href = `/api/clips/${encodeURIComponent(clip.filename)}`;
+        link.download = clip.filename;
+        link.textContent = `${clip.filename} · ${clip.duration.toFixed(1)}s`;
+        links.append(link, document.createElement("br"));
+      });
+      panel.style.display = "block";
+    }
+  </script>
+</body>
+</html>
