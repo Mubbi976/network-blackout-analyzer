@@ -1,43 +1,58 @@
-# Network Blackout Analyzer — DSA Project Documentation
+# Network Blackout Analyzer
 
-## 1. Problem Statement & Mathematical Formulation
-An enterprise network topology is modeled as an undirected weighted graph $G = (V, E)$, where:
-- **Vertices ($V$)**: $V = \{R1, R2, R3, R4, R5, PC1, PC2, Server1\}$ ($|V| = 8$).
-- **Edges ($E$)**:
-  - Core ring: $(R1, R2), (R2, R3), (R3, R4), (R4, R1)$ with weight 1.
-  - Primary Server Uplink: $(R3, R5)$ with weight 1.
-  - Redundant Backup Uplink: $(R2, R5)$ with weight 5 (models higher OSPF cost / metric).
-  - Access LAN links: $(R1, PC1), (R4, PC2), (R5, Server1)$ with weight 1.
+## Overview
 
-The objective is to analyze network survivability, detect single points of failure (bridges and cut vertices), and evaluate dynamic failover routes during link blackouts.
+Network Blackout Analyzer is a graph-based network resilience tool. It models an eight-node enterprise topology, simulates router or link failures, detects critical infrastructure, and recalculates routes from R1 to Server1.
 
----
+The project includes a Tkinter desktop application and an interactive browser dashboard.
 
-## 2. Algorithms Implemented & Complexity Analysis
+## Topology
 
-### 2.1 Breadth-First Search (BFS) & Depth-First Search (DFS)
-- **Purpose**: Evaluates reachability and identifies isolated network components.
-- **Data Structures**: Queue (`collections.deque`) for BFS, Stack (`list`) for DFS, `set` for visited tracking.
-- **Time Complexity**: $\mathcal{O}(|V| + |E|)$ — each vertex and incident edge is explored once.
-- **Space Complexity**: $\mathcal{O}(|V|)$ — auxiliary space for traversal queue/stack and visited sets.
+The undirected weighted graph contains:
 
-### 2.2 Tarjan's Bridge-Finding Algorithm
-- **Purpose**: Finds critical edges whose failure partitions the network into disconnected components.
-- **Mechanism**: DFS spanning tree maintaining discovery times `tin[u]` and lowest reachable ancestor `low[u]`.
-- **Condition**: An edge $(u, v)$ is a bridge if $low[v] > tin[u]$.
-- **Time Complexity**: $\mathcal{O}(|V| + |E|)$.
-- **Space Complexity**: $\mathcal{O}(|V|)$.
+- **Nodes:** R1, R2, R3, R4, R5, PC1, PC2, Server1
+- **Core ring:** R1-R2-R3-R4-R1
+- **Primary server uplink:** R3-R5, cost 1
+- **Backup uplink:** R2-R5, cost 5
+- **Access links:** R1-PC1, R4-PC2, R5-Server1
 
-### 2.3 Tarjan's Articulation Points (Cut Vertices) Algorithm
-- **Purpose**: Finds critical router nodes whose complete failure isolates portions of the network.
-- **Conditions**:
-  1. Root node of DFS tree with $\ge 2$ children in DFS tree.
-  2. Non-root node $u$ with child $v$ such that $low[v] \ge tin[u]$.
-- **Time Complexity**: $\mathcal{O}(|V| + |E|)$.
-- **Space Complexity**: $\mathcal{O}(|V|)$.
+Edge and node states can be toggled to simulate blackouts. All algorithms operate on the remaining active graph.
 
-### 2.4 Dijkstra's Shortest Path Algorithm
-- **Purpose**: Simulates dynamic routing (OSPF shortest path first) from source (R1) to Server1.
-- **Mechanism**: Min-priority heap (`heapq`). Under primary uplink failure $(R3, R5)$, Dijkstra dynamically recalculates the path via the backup link $(R2, R5)$.
-- **Time Complexity**: $\mathcal{O}(|E| \log |V|)$ using min-heap.
-- **Space Complexity**: $\mathcal{O}(|V|)$ for distances and predecessor map.
+## Algorithms
+
+| Algorithm | Purpose | Time complexity |
+| --- | --- | --- |
+| BFS | Reachability and visit order | O(\|V\| + \|E\|) |
+| DFS | Reachability and traversal | O(\|V\| + \|E\|) |
+| Tarjan bridge finding | Detect cut-edges whose failure disconnects the graph | O(\|V\| + \|E\|) |
+| Tarjan articulation points | Detect cut-nodes whose failure disconnects the graph | O(\|V\| + \|E\|) |
+| Dijkstra | Find the lowest-cost R1-to-Server1 route | O(\|E\| log \|V\|) |
+
+An edge `(u, v)` is a bridge when `low[v] > tin[u]` during Tarjan traversal. A non-root node is a cut vertex when `low[child] >= tin[node]`; a root is a cut vertex when it has at least two DFS children.
+
+Dijkstra excludes failed edges and nodes. The normal route is R1-R2-R3-R5-Server1, cost 4. Failure of R3-R5 causes failover to R1-R2-R5-Server1, cost 7.
+
+## Interfaces
+
+- **Desktop:** Run `python network_blackout.py` for the Tkinter visualization and controls.
+- **Browser:** Run `python server.py`, then open `http://localhost:8080`. The server serves `web/index.html` and opens the page automatically.
+- **Web controls:** Simulate outages, recover the topology, highlight bridges and cut vertices, and run animated BFS or DFS traversals.
+
+## Implementation
+
+- `algorithms/graph.py`: graph model and algorithms
+- `gui/network_gui.py`: desktop visualization and controls
+- `network_blackout.py`: desktop entry point
+- `server.py`: local HTTP server
+- `web/index.html`: browser dashboard
+- `tests/test_graph.py`: graph algorithm and failure tests
+
+## Testing
+
+Run the unit tests with:
+
+```bash
+python -m unittest tests/test_graph.py
+```
+
+Tests cover traversal, failover, unreachable destinations, bridge and cut-node detection, edge and node toggling, and permanent edge removal.
