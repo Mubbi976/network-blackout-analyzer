@@ -231,14 +231,20 @@
         <g id="nodes-layer"></g>
       </svg>
 
-      <div class="absolute bottom-12 right-4 z-10 w-64 rounded-xl border border-cyan-900/70 bg-[#090d16]/95 p-3 shadow-2xl shadow-cyan-950/30 backdrop-blur-md">
+      <div class="absolute bottom-12 right-4 z-10 w-72 rounded-xl border border-cyan-900/70 bg-[#090d16]/95 p-3 shadow-2xl shadow-cyan-950/30 backdrop-blur-md">
         <div class="flex items-center justify-between">
           <span class="text-[10px] font-bold uppercase tracking-wider text-cyan-300">Live packet flow</span>
           <span id="packet-status" class="flex items-center gap-1.5 text-[9px] font-bold text-emerald-400"><span class="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400"></span>STREAMING</span>
         </div>
         <div class="mt-2 flex items-center justify-between gap-2 text-[11px] font-semibold text-slate-200">
-          <span>PC1</span><span class="flex-1 border-t border-dashed border-cyan-700"></span><span class="text-cyan-300">Server1</span>
+          <label for="packet-source" class="text-[10px] text-slate-400">From</label>
+          <select id="packet-source" class="rounded-md border border-slate-700 bg-slate-950 px-2 py-1 text-[10px] font-semibold text-cyan-200 outline-none focus:border-cyan-500">
+            <option value="PC1">PC1 · Client</option>
+            <option value="PC2">PC2 · Branch</option>
+          </select>
+          <span class="flex-1 border-t border-dashed border-cyan-700"></span><span class="text-cyan-300">Server1</span>
         </div>
+        <div id="packet-route-summary" class="mt-1 truncate text-[9px] text-slate-400" aria-live="polite"></div>
         <div class="mt-2 flex items-center justify-between">
           <span class="mono text-[9px] text-slate-400"><span id="packet-in-flight">0</span> in flight · <span id="packet-delivered">0</span> delivered · <span id="packet-loss">0</span> dropped</span>
           <button id="btn-send-packet" class="rounded-md border border-cyan-700 bg-cyan-950/70 px-2 py-1 text-[10px] font-bold text-cyan-200 transition hover:border-cyan-400 hover:bg-cyan-900/70 active:scale-95">Send packet</button>
@@ -370,6 +376,7 @@
     let lastPacketFrame = 0;
     const logs = [];
     let packetLosses = 0;
+    let packetSource = "PC1";
     let algorithmSteps = [];
     let algorithmStepIndex = 0;
     let algorithmTimer = null;
@@ -971,54 +978,106 @@
       algorithmStep(0);
     }
 
-    function getPacketRoute() {
-      if (!activePath.length || failedEdges.has(edgeKey("PC1", "R1")) ||
-          failedNodes.has("PC1") || failedNodes.has("R1") || failedNodes.has("Server1")) return [];
-      return ["PC1", ...activePath];
+    function getPacketRoute(sourceId = packetSource) {
+      const sourceRouters = { PC1: "R1", PC2: "R4" };
+      const sourceRouter = sourceRouters[sourceId];
+      if (!sourceRouter || failedNodes.has(sourceId) || failedNodes.has(sourceRouter) ||
+          failedNodes.has("Server1") || failedEdges.has(edgeKey(sourceId, sourceRouter))) return [];
+
+      if (sourceId === "PC1") {
+        return activePath.length ? [sourceId, ...activePath] : [];
+      }
+
+      const distances = Object.fromEntries(NODES.map(node => [node.id, Infinity]));
+      const previous = {};
+      const queue = [{ node: sourceRouter, distance: 0 }];
+      distances[sourceRouter] = 0;
+
+      while (queue.length) {
+        queue.sort((a, b) => a.distance - b.distance);
+        const { node, distance } = queue.shift();
+        if (distance !== distances[node]) continue;
+        if (node === "Server1") break;
+
+        EDGES.forEach(edge => {
+          if (failedEdges.has(edgeKey(edge.u, edge.v)) ||
+              failedNodes.has(edge.u) || failedNodes.has(edge.v)) return;
+          const neighbor = edge.u === node ? edge.v : edge.v === node ? edge.u : null;
+          if (!neighbor) return;
+          const candidateDistance = distance + edge.cost;
+          if (candidateDistance < distances[neighbor]) {
+            distances[neighbor] = candidateDistance;
+            previous[neighbor] = node;
+            queue.push({ node: neighbor, distance: candidateDistance });
+          }
+        });
+      }
+
+      if (distances.Server1 === Infinity) return [];
+      const route = ["Server1"];
+      while (route[route.length - 1] !== sourceRouter) {
+        const predecessor = previous[route[route.length - 1]];
+        if (!predecessor) return [];
+        route.push(predecessor);
+      }
+      return [sourceId, ...route.reverse()];
     }
 
     function sendPacket() {
-      if (!getPacketRoute().length) {
+      const route = getPacketRoute();
+      if (!route.length) {
         packetLosses++;
-        addLog("PACKET DROPPED: PC1 has no active route to Server1.", "CRITICAL", "text-rose-400 bg-rose-950/60 border-rose-800/60");
+        addLog(`PACKET DROPPED: ${packetSource} has no active route to Server1.`, "CRITICAL", "text-rose-400 bg-rose-950/60 border-rose-800/60");
         updatePacketStats();
         return;
       }
 
-      packets.push({ id: nextPacketId++, progress: 0 });
+      packets.push({ id: nextPacketId++, sourceId: packetSource, progress: 0 });
       renderPackets();
-      addLog("PACKET SENT: TCP payload dispatched from PC1 to Server1.", "TRAFFIC", "text-cyan-400 bg-cyan-950/60 border-cyan-800/60");
+      addLog(`PACKET SENT: TCP payload dispatched from ${packetSource} to Server1 via ${route.join(" -> ")}.`, "TRAFFIC", "text-cyan-400 bg-cyan-950/60 border-cyan-800/60");
       updatePacketStats();
     }
 
     function renderPackets() {
       const layer = document.getElementById("packets-layer");
-      const route = getPacketRoute();
-      if (route.length < 2) {
-        if (packets.length) {
-          packetLosses += packets.length;
-          packets = [];
-          updatePacketStats();
-          addLog("PACKET LOSS: Active route from PC1 to Server1 was interrupted.", "CRITICAL", "text-rose-400 bg-rose-950/60 border-rose-800/60");
-        }
-        const status = document.getElementById("packet-status");
-        status.className = "flex items-center gap-1.5 text-[9px] font-bold text-rose-400";
-        status.innerHTML = '<span class="h-1.5 w-1.5 rounded-full bg-rose-400"></span>NO ROUTE';
-        layer.innerHTML = "";
-        return;
+      const selectedRoute = getPacketRoute();
+      const validPackets = packets.filter(packet => getPacketRoute(packet.sourceId).length > 1);
+      const droppedPackets = packets.length - validPackets.length;
+      if (droppedPackets) {
+        packetLosses += droppedPackets;
+        packets = validPackets;
+        addLog(`PACKET LOSS: ${droppedPackets} in-flight packet${droppedPackets === 1 ? "" : "s"} lost after a route failure.`, "CRITICAL", "text-rose-400 bg-rose-950/60 border-rose-800/60");
+        updatePacketStats();
       }
-      const status = document.getElementById("packet-status");
-      status.className = `flex items-center gap-1.5 text-[9px] font-bold ${packets.length ? "text-emerald-400" : "text-slate-400"}`;
-      status.innerHTML = packets.length
-        ? '<span class="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400"></span>IN FLIGHT'
-        : '<span class="h-1.5 w-1.5 rounded-full bg-slate-500"></span>READY';
 
-      const pathData = route.map((id, index) => {
-        const node = NODES.find(item => item.id === id);
-        return `${index === 0 ? "M" : "L"} ${node.x} ${node.y}`;
-      }).join(" ");
+      const status = document.getElementById("packet-status");
+      status.className = `flex items-center gap-1.5 text-[9px] font-bold ${selectedRoute.length ? (packets.length ? "text-emerald-400" : "text-slate-400") : "text-rose-400"}`;
+      status.innerHTML = selectedRoute.length
+        ? (packets.length
+          ? '<span class="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400"></span>IN FLIGHT'
+          : '<span class="h-1.5 w-1.5 rounded-full bg-slate-500"></span>READY')
+        : '<span class="h-1.5 w-1.5 rounded-full bg-rose-400"></span>NO ROUTE';
+      const routeSummary = document.getElementById("packet-route-summary");
+      routeSummary.textContent = selectedRoute.length
+        ? `${selectedRoute.join(" → ")} · cost ${selectedRoute.slice(0, -1).reduce((total, node, index) => {
+          const nextNode = selectedRoute[index + 1];
+          const edge = EDGES.find(item => edgeKey(item.u, item.v) === edgeKey(node, nextNode));
+          return total + (edge ? edge.cost : 0);
+        }, 0)}`
+        : `${packetSource} cannot reach Server1`;
+
+      const activeRoutes = Array.from(new Map(packets.map(packet => {
+        const route = getPacketRoute(packet.sourceId);
+        return [route.join("|"), route];
+      })).values());
       layer.innerHTML = `
-        <path d="${pathData}" fill="none" stroke="#22d3ee" stroke-width="1.5" stroke-dasharray="3 9" opacity="0.35" />
+        ${activeRoutes.map(route => {
+          const pathData = route.map((id, index) => {
+            const node = NODES.find(item => item.id === id);
+            return `${index === 0 ? "M" : "L"} ${node.x} ${node.y}`;
+          }).join(" ");
+          return `<path d="${pathData}" fill="none" stroke="#22d3ee" stroke-width="1.5" stroke-dasharray="3 9" opacity="0.35" />`;
+        }).join("")}
         ${packets.map(packet => `
           <g id="packet-${packet.id}" filter="url(#cyanGlow)">
             <rect x="-7" y="-5" width="14" height="10" rx="3" fill="#06b6d4" stroke="#cffafe" stroke-width="1.5" />
@@ -1039,19 +1098,21 @@
       const elapsed = lastPacketFrame ? Math.min(timestamp - lastPacketFrame, 100) : 0;
       lastPacketFrame = timestamp;
 
-      const route = getPacketRoute();
-      if (route.length > 1 && elapsed > 0) {
-        const segments = [];
-        let totalLength = 0;
-        for (let index = 0; index < route.length - 1; index++) {
-          const from = NODES.find(node => node.id === route[index]);
-          const to = NODES.find(node => node.id === route[index + 1]);
-          const length = Math.hypot(to.x - from.x, to.y - from.y);
-          segments.push({ from, to, length });
-          totalLength += length;
-        }
-
+      if (packets.length && elapsed > 0) {
         packets.forEach(packet => {
+          const route = getPacketRoute(packet.sourceId);
+          if (route.length < 2) return;
+
+          const segments = [];
+          let totalLength = 0;
+          for (let index = 0; index < route.length - 1; index++) {
+            const from = NODES.find(node => node.id === route[index]);
+            const to = NODES.find(node => node.id === route[index + 1]);
+            const length = Math.hypot(to.x - from.x, to.y - from.y);
+            segments.push({ from, to, length });
+            totalLength += length;
+          }
+
           packet.progress += elapsed / 6500;
           const distance = Math.min(packet.progress, 1) * totalLength;
           let traversed = 0;
@@ -1522,6 +1583,10 @@
     document.getElementById("btn-bfs").addEventListener("click", triggerBFS);
     document.getElementById("btn-dfs").addEventListener("click", triggerDFS);
     document.getElementById("btn-send-packet").addEventListener("click", sendPacket);
+    document.getElementById("packet-source").addEventListener("change", event => {
+      packetSource = event.currentTarget.value;
+      updateUI();
+    });
     document.getElementById("btn-scenario").addEventListener("click", runPredefinedScenario);
     document.getElementById("btn-recommend").addEventListener("click", recommendBackupLink);
     document.getElementById("btn-apply-link").addEventListener("click", applyRecommendedLink);

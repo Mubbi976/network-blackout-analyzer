@@ -50,7 +50,7 @@ Links are undirected. An edge failure takes the edge out of traversal and routin
 - Toggle links up or down and observe route recalculation.
 - Highlight active routes, failed links, backup links, bridges, articulation points, and unreachable devices.
 - Inspect an event log with simulated routing and recovery messages.
-- The browser dashboard has a live packet-flow visualization. Packets are sent **only** when the user clicks **Send packet**; successful, in-flight, and dropped packet counts are displayed.
+- The browser dashboard has a live packet-flow visualization for both PC1 and PC2. Choose the source endpoint, inspect its current route and cost, then click **Send packet**; successful, in-flight, and dropped packet counts are displayed. Traffic follows active links and routers, and an endpoint or route failure is reported as a dropped packet.
 
 ### Vulnerability and connectivity analysis
 
