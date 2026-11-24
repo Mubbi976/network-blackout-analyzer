@@ -120,6 +120,77 @@ class GraphAlgorithmTests(unittest.TestCase):
         self.assertEqual(["R4"], order)
         self.assertEqual({"R4"}, seen)
 
+    def test_resilience_and_components_are_calculated_from_state(self):
+        initial = self.graph.network_resilience_score()
+        self.assertEqual(100, initial["score"])
+        self.graph.failed_edges.update({
+            edge_key("R3", "R5"),
+            edge_key("R2", "R5"),
+        })
+        failed = self.graph.network_resilience_score()
+        self.assertLess(failed["score"], initial["score"])
+        self.assertGreaterEqual(len(failed["components"]), 2)
+
+    def test_backup_candidates_return_ranked_missing_links(self):
+        initial_weights = dict(self.graph.weights)
+        initial_adjacency = {node: set(neighbors)
+                             for node, neighbors in self.graph.adj.items()}
+        candidates = self.graph.backup_link_candidates()
+        self.assertTrue(candidates)
+        self.assertIn("u", candidates[0])
+        self.assertIn("v", candidates[0])
+        self.assertIn("reason", candidates[0])
+        self.assertEqual(initial_weights, self.graph.weights)
+        self.assertEqual(initial_adjacency, self.graph.adj)
+
+    def test_backup_candidates_skip_failed_routers(self):
+        self.graph.toggle_node("R3")
+        candidates = self.graph.backup_link_candidates()
+        self.assertTrue(all("R3" not in (candidate["u"], candidate["v"])
+                            for candidate in candidates))
+
+    def test_backup_candidates_can_be_limited_to_router_nodes(self):
+        candidates = self.graph.backup_link_candidates(["R1", "R5"])
+        self.assertTrue(candidates)
+        self.assertTrue(all(candidate["u"] in {"R1", "R5"} and
+                            candidate["v"] in {"R1", "R5"}
+                            for candidate in candidates))
+
+    def test_backup_candidates_rank_single_link_failure_resilience(self):
+        candidate = self.graph.backup_link_candidates(
+            [node for node in NODES if node.startswith("R")]
+        )[0]
+        self.assertGreater(candidate["single_failure_gain"], 0)
+        self.assertIn("single-link failure", candidate["reason"])
+
+    def test_algorithm_step_snapshots(self):
+        bfs_steps = self.graph.bfs_steps("R1")
+        dfs_steps = self.graph.dfs_steps("R1")
+        dijkstra_steps = self.graph.dijkstra_steps("R1", "Server1")
+        tarjan_steps = self.graph.tarjan_steps()
+        self.assertTrue(bfs_steps)
+        self.assertTrue(dfs_steps)
+        self.assertTrue(dijkstra_steps)
+        self.assertTrue(tarjan_steps)
+        self.assertEqual(["R1", "R2", "R3", "R5", "Server1"],
+                         dijkstra_steps[-1]["path"])
+
+    def test_dijkstra_steps_report_unavailable_endpoints(self):
+        self.graph.toggle_node("R1")
+        steps = self.graph.dijkstra_steps("R1", "Server1")
+        self.assertIsNone(steps[-1]["path"])
+        self.assertEqual(float("inf"), steps[-1]["cost"])
+
+    def test_restore_all_and_failure_report(self):
+        self.graph.toggle_edge("R3", "R5")
+        self.graph.toggle_node("R4")
+        report = self.graph.failure_report("Custom dual failure")
+        self.assertEqual(["R4"], report["failed_routers"])
+        self.assertEqual(["R3-R5"], report["failed_links"])
+        self.assertEqual(2, self.graph.restore_all())
+        self.assertEqual(set(), self.graph.failed_edges)
+        self.assertEqual(set(), self.graph.failed_nodes)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

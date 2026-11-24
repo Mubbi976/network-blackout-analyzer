@@ -49,6 +49,14 @@
       100% { r: 24px; stroke: #38bdf8; stroke-width: 3px; }
     }
     .node-pulse-active { animation: node-visit 1s infinite ease-in-out; }
+    @media print {
+      body { display: block !important; height: auto !important; overflow: visible !important; background: white !important; color: black !important; }
+      body > *:not(#failure-report-print) { display: none !important; }
+      #failure-report-print { display: block !important; padding: 24px; font-family: Arial, sans-serif; color: #111827; }
+      #failure-report-print table { width: 100%; border-collapse: collapse; }
+      #failure-report-print th, #failure-report-print td { border: 1px solid #cbd5e1; padding: 8px; text-align: left; }
+      #failure-report-print th { background: #e2e8f0; }
+    }
 
     ::-webkit-scrollbar { width: 5px; height: 5px; }
     ::-webkit-scrollbar-track { background: #080c14; }
@@ -103,7 +111,7 @@
     </div>
 
     <div class="flex items-center gap-2">
-      <span class="text-[10px] text-slate-400 border border-slate-800 px-2 py-1 rounded bg-slate-900 mono">DSA Graph: |V| = 8, |E| = 9</span>
+      <span id="graph-size-top" class="text-[10px] text-slate-400 border border-slate-800 px-2 py-1 rounded bg-slate-900 mono">DSA Graph: |V| = 8, |E| = 9</span>
     </div>
   </header>
 
@@ -158,6 +166,28 @@
         </div>
       </div>
 
+      <!-- Advanced Resilience Lab -->
+      <div class="p-3 border-b border-slate-800/70 space-y-2">
+        <div class="flex items-center justify-between">
+          <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Resilience Lab</span>
+          <span id="lab-score" class="text-[10px] font-bold text-emerald-400 mono">100% HEALTH</span>
+        </div>
+        <select id="scenario-select" class="w-full rounded-md border border-slate-700 bg-slate-950 px-2 py-1.5 text-[10px] text-slate-200 outline-none">
+          <option value="primary">Primary uplink failure</option>
+          <option value="backup">Backup uplink failure</option>
+          <option value="uplinks">Simultaneous uplink failure</option>
+          <option value="router-r3">R3 router failure</option>
+          <option value="cascading">Cascading core failure</option>
+        </select>
+        <div class="grid grid-cols-2 gap-2">
+          <button id="btn-scenario" class="rounded-md border border-amber-700 bg-amber-950/60 px-2 py-1.5 text-[10px] font-bold text-amber-300 hover:bg-amber-900/60">Run scenario</button>
+          <button id="btn-recommend" class="rounded-md border border-violet-700 bg-violet-950/60 px-2 py-1.5 text-[10px] font-bold text-violet-300 hover:bg-violet-900/60">Recommend link</button>
+        </div>
+        <button id="btn-apply-link" disabled class="w-full rounded-md border border-violet-900 bg-violet-950/30 px-2 py-1.5 text-[10px] font-bold text-violet-400 disabled:cursor-not-allowed disabled:opacity-50">Apply recommended link</button>
+        <button id="btn-export-report" class="w-full rounded-md border border-slate-700 bg-slate-900 px-2 py-1.5 text-[10px] font-bold text-slate-300 hover:border-cyan-700 hover:text-cyan-300">Export CSV failure report</button>
+        <button id="btn-print-report" class="w-full rounded-md border border-slate-700 bg-slate-900 px-2 py-1.5 text-[10px] font-bold text-slate-300 hover:border-cyan-700 hover:text-cyan-300">Print / Save PDF report</button>
+      </div>
+
       <!-- Live Edge Toggle Circuit List -->
       <div class="p-3 pb-1 border-b border-slate-800/40 flex items-center justify-between">
         <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Circuit Switching & Links</span>
@@ -195,9 +225,25 @@
         </defs>
         <!-- Edges Layer -->
         <g id="edges-layer"></g>
+        <!-- Live Packet Layer -->
+        <g id="packets-layer"></g>
         <!-- Nodes Layer -->
         <g id="nodes-layer"></g>
       </svg>
+
+      <div class="absolute bottom-12 right-4 z-10 w-64 rounded-xl border border-cyan-900/70 bg-[#090d16]/95 p-3 shadow-2xl shadow-cyan-950/30 backdrop-blur-md">
+        <div class="flex items-center justify-between">
+          <span class="text-[10px] font-bold uppercase tracking-wider text-cyan-300">Live packet flow</span>
+          <span id="packet-status" class="flex items-center gap-1.5 text-[9px] font-bold text-emerald-400"><span class="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400"></span>STREAMING</span>
+        </div>
+        <div class="mt-2 flex items-center justify-between gap-2 text-[11px] font-semibold text-slate-200">
+          <span>PC1</span><span class="flex-1 border-t border-dashed border-cyan-700"></span><span class="text-cyan-300">Server1</span>
+        </div>
+        <div class="mt-2 flex items-center justify-between">
+          <span class="mono text-[9px] text-slate-400"><span id="packet-in-flight">0</span> in flight · <span id="packet-delivered">0</span> delivered · <span id="packet-loss">0</span> dropped</span>
+          <button id="btn-send-packet" class="rounded-md border border-cyan-700 bg-cyan-950/70 px-2 py-1 text-[10px] font-bold text-cyan-200 transition hover:border-cyan-400 hover:bg-cyan-900/70 active:scale-95">Send packet</button>
+        </div>
+      </div>
 
       <!-- Bottom Canvas Overlay Legend -->
       <div class="absolute bottom-2 left-4 bg-[#090d16]/90 border border-slate-800/90 rounded-lg px-3.5 py-1.5 flex items-center gap-4 text-[11px] backdrop-blur-md z-10">
@@ -224,10 +270,13 @@
         <button id="tab-btn-cisco" onclick="switchBottomTab('cisco')" class="h-full border-b-2 font-semibold px-2 flex items-center gap-1.5 border-transparent text-slate-400 hover:text-slate-200">
           <span>Cisco IOS Area 0 Configurations</span>
         </button>
+        <button id="tab-btn-resilience" onclick="switchBottomTab('resilience')" class="h-full border-b-2 font-semibold px-2 flex items-center gap-1.5 border-transparent text-slate-400 hover:text-slate-200">
+          <span>Resilience & Algorithm Lab</span>
+        </button>
       </div>
 
       <div class="text-[11px] text-slate-500 mono flex items-center gap-2">
-        <span>DSA Graph: |V| = 8, |E| = 9</span>
+        <span id="graph-size-bottom">DSA Graph: |V| = 8, |E| = 9</span>
       </div>
     </div>
 
@@ -248,8 +297,29 @@
         <div> network 10.0.35.0 0.0.0.3 area 0  ! R3-R5 Primary Uplink (Metric 1)</div>
         <div> network 10.0.25.0 0.0.0.3 area 0  ! R2-R5 Redundant Backup Trunk (Metric 5)</div>
       </div>
+      <div id="tab-content-resilience" class="hidden space-y-2">
+        <div class="grid grid-cols-2 gap-2">
+          <div class="rounded-md border border-slate-800 bg-slate-950/50 p-2">
+            <div class="mb-1 text-[10px] font-bold text-cyan-400">ALGORITHM EXECUTION</div>
+            <div id="algorithm-status" class="text-slate-300">No algorithm run.</div>
+            <div id="algorithm-state" class="mt-1 text-slate-500"></div>
+          </div>
+          <div class="rounded-md border border-slate-800 bg-slate-950/50 p-2">
+            <div class="mb-1 text-[10px] font-bold text-emerald-400">RESILIENCE & PERFORMANCE</div>
+            <div id="resilience-details" class="text-slate-300">Calculating network health...</div>
+          </div>
+        </div>
+        <div class="flex items-center gap-2">
+          <button onclick="algorithmStep(-1)" class="rounded border border-slate-700 bg-slate-900 px-2 py-1 text-[10px]">Step Backward</button>
+          <button onclick="algorithmStep(1)" class="rounded border border-slate-700 bg-slate-900 px-2 py-1 text-[10px]">Step Forward</button>
+          <button onclick="algorithmPlay()" class="rounded border border-cyan-700 bg-cyan-950/60 px-2 py-1 text-[10px] text-cyan-300">Play</button>
+          <button onclick="algorithmPause()" class="rounded border border-slate-700 bg-slate-900 px-2 py-1 text-[10px]">Pause</button>
+          <button onclick="algorithmReset()" class="rounded border border-slate-700 bg-slate-900 px-2 py-1 text-[10px]">Reset</button>
+        </div>
+      </div>
     </div>
   </footer>
+  <section id="failure-report-print" class="hidden"></section>
 
   <script>
     const INITIAL_COORDS = {
@@ -287,13 +357,28 @@
     ];
 
     const failedEdges = new Set();
+    const failedNodes = new Set();
     let activePath = [];
     let pathCost = 0;
     let bridges = new Set();
     let cutVertices = new Set();
     let activeHighlightMode = null; // 'bridges' | 'cuts' | 'traversal'
     let activeVisitedNode = null;
+    let packets = [];
+    let nextPacketId = 0;
+    let packetsDelivered = 0;
+    let lastPacketFrame = 0;
     const logs = [];
+    let packetLosses = 0;
+    let algorithmSteps = [];
+    let algorithmStepIndex = 0;
+    let algorithmTimer = null;
+    let reportBefore = null;
+    let recommendedLink = null;
+    let dijkstraTimeline = [];
+    let tarjanDiscovery = {};
+    let tarjanLow = {};
+    let lastRecoveryDuration = null;
 
     function edgeKey(u, v) {
       return [u, v].sort().join("-");
@@ -344,7 +429,7 @@
     }
 
     function switchBottomTab(tab) {
-      ["logs", "dsa", "cisco"].forEach(t => {
+      ["logs", "dsa", "cisco", "resilience"].forEach(t => {
         const btn = document.getElementById(`tab-btn-${t}`);
         const content = document.getElementById(`tab-content-${t}`);
         if (t === tab) {
@@ -359,11 +444,14 @@
 
     // Graph Algorithms
     function runAlgorithms() {
+      const spfStarted = performance.now();
+      const previousPath = [...activePath];
+      const previousCost = pathCost;
       const adj = {};
       NODES.forEach(n => adj[n.id] = []);
       EDGES.forEach(e => {
         const key = edgeKey(e.u, e.v);
-        if (!failedEdges.has(key)) {
+        if (!failedEdges.has(key) && !failedNodes.has(e.u) && !failedNodes.has(e.v)) {
           adj[e.u].push({ neighbor: e.v, cost: e.cost });
           adj[e.v].push({ neighbor: e.u, cost: e.cost });
         }
@@ -372,14 +460,20 @@
       // 1. Dijkstra from R1 to Server1
       const distances = {};
       const previous = {};
-      const pq = [{ node: "R1", dist: 0 }];
+      const pq = failedNodes.has("R1") ? [] : [{ node: "R1", dist: 0 }];
+      dijkstraTimeline = [];
       NODES.forEach(n => distances[n.id] = Infinity);
-      distances["R1"] = 0;
+      if (!failedNodes.has("R1")) distances["R1"] = 0;
 
       while (pq.length > 0) {
         pq.sort((a, b) => a.dist - b.dist);
         const { node: curr, dist } = pq.shift();
-        if (dist > distances[curr]) continue;
+        if (dist !== distances[curr]) continue;
+        dijkstraTimeline.push({
+          type: "DIJKSTRA",
+          node: curr,
+          description: `Select ${curr} at cost ${dist} · queue [${pq.map(item => `${item.node}:${item.dist}`).join(", ")}]`
+        });
         if (curr === "Server1") break;
 
         for (const { neighbor, cost } of adj[curr] || []) {
@@ -388,6 +482,11 @@
             distances[neighbor] = alt;
             previous[neighbor] = curr;
             pq.push({ node: neighbor, dist: alt });
+            dijkstraTimeline.push({
+              type: "DIJKSTRA",
+              node: neighbor,
+              description: `Update ${neighbor}: tentative cost ${alt} · predecessor ${curr}`
+            });
           }
         }
       }
@@ -436,20 +535,563 @@
       }
 
       NODES.forEach(n => {
-        if (tin[n.id] === undefined) dfs(n.id);
+        if (!failedNodes.has(n.id) && tin[n.id] === undefined) dfs(n.id);
       });
+      tarjanDiscovery = { ...tin };
+      tarjanLow = { ...low };
 
+      algorithmSteps = dijkstraTimeline.concat([{
+        type: "DIJKSTRA",
+        node: activePath.length ? "Server1" : null,
+        description: activePath.length
+          ? `Final route ${activePath.join(" -> ")} · total cost ${pathCost}`
+          : "Server1 unreachable · no active shortest path"
+      }]);
+      algorithmStepIndex = 0;
       updateUI();
+      if (previousPath.length && (previousPath.join("|") !== activePath.join("|") ||
+          previousCost !== pathCost)) {
+        addLog(
+          `OSPF SIMULATION: SPF route changed from ${previousPath.join(" -> ")} (cost ${previousCost}) to ${activePath.join(" -> ") || "unreachable"} (cost ${pathCost}); simulated convergence ${Math.round(performance.now() - spfStarted)} ms.`,
+          "ROUTING",
+          "text-cyan-400 bg-cyan-950/60 border-cyan-800/60"
+        );
+      }
+    }
+
+    function calculateResilience(extraEdge = null) {
+      const graphEdges = extraEdge ? [...EDGES, extraEdge] : EDGES;
+      const active = edge => !failedEdges.has(edgeKey(edge.u, edge.v)) &&
+        !failedNodes.has(edge.u) && !failedNodes.has(edge.v);
+      const reachable = new Set();
+      if (!failedNodes.has("R1")) {
+        const queue = ["R1"];
+        reachable.add("R1");
+        while (queue.length) {
+          const curr = queue.shift();
+          graphEdges.forEach(edge => {
+            if (!active(edge)) return;
+            const neighbor = edge.u === curr ? edge.v :
+              (edge.v === curr ? edge.u : null);
+            if (neighbor && !reachable.has(neighbor)) {
+              reachable.add(neighbor);
+              queue.push(neighbor);
+            }
+          });
+        }
+      }
+      const components = [];
+      const componentVisited = new Set(failedNodes);
+      NODES.forEach(node => {
+        if (componentVisited.has(node.id)) return;
+        const component = [];
+        const queue = [node.id];
+        componentVisited.add(node.id);
+        while (queue.length) {
+          const curr = queue.shift();
+          component.push(curr);
+          graphEdges.forEach(edge => {
+            if (!active(edge)) return;
+            const neighbor = edge.u === curr ? edge.v :
+              (edge.v === curr ? edge.u : null);
+            if (neighbor && !componentVisited.has(neighbor)) {
+              componentVisited.add(neighbor);
+              queue.push(neighbor);
+            }
+          });
+        }
+        components.push(component);
+      });
+      const activeLinks = graphEdges.filter(active).length;
+      const totalLinks = graphEdges.length;
+      const nodeRatio = reachable.size / NODES.length;
+      const linkRatio = activeLinks / totalLinks;
+      const componentPenalty = Math.max(0, components.length - 1) * 10;
+      const score = Math.round(Math.max(0,
+        nodeRatio * 70 + linkRatio * 30 - componentPenalty));
+      const loss = Math.round((1 - nodeRatio) * 100);
+      return {
+        score, reachable: reachable.size, totalNodes: NODES.length,
+        activeLinks, totalLinks, loss, components
+      };
+    }
+
+    function countTopologyBridges(extraEdge = null) {
+      const graphEdges = extraEdge ? [...EDGES, extraEdge] : EDGES;
+      const adj = Object.fromEntries(NODES.map(node => [node.id, []]));
+      graphEdges.forEach(edge => {
+        if (failedEdges.has(edgeKey(edge.u, edge.v)) ||
+            failedNodes.has(edge.u) || failedNodes.has(edge.v)) return;
+        adj[edge.u].push(edge.v);
+        adj[edge.v].push(edge.u);
+      });
+      let timer = 0;
+      const discovered = {};
+      const low = {};
+      let count = 0;
+      function visit(node, parent) {
+        discovered[node] = low[node] = timer++;
+        adj[node].forEach(neighbor => {
+          if (neighbor === parent) return;
+          if (discovered[neighbor] !== undefined) {
+            low[node] = Math.min(low[node], discovered[neighbor]);
+            return;
+          }
+          visit(neighbor, node);
+          low[node] = Math.min(low[node], low[neighbor]);
+          if (low[neighbor] > discovered[node]) count++;
+        });
+      }
+      NODES.forEach(node => {
+        if (!failedNodes.has(node.id) && discovered[node.id] === undefined) {
+          visit(node.id, null);
+        }
+      });
+      return count;
+    }
+
+    function countTopologyArticulations(extraEdge = null) {
+      const graphEdges = extraEdge ? [...EDGES, extraEdge] : EDGES;
+      const adj = Object.fromEntries(NODES.map(node => [node.id, []]));
+      graphEdges.forEach(edge => {
+        if (failedEdges.has(edgeKey(edge.u, edge.v)) ||
+            failedNodes.has(edge.u) || failedNodes.has(edge.v)) return;
+        adj[edge.u].push(edge.v);
+        adj[edge.v].push(edge.u);
+      });
+      let timer = 0;
+      const discovered = {};
+      const low = {};
+      const articulations = new Set();
+      function visit(node, parent) {
+        discovered[node] = low[node] = timer++;
+        let children = 0;
+        adj[node].forEach(neighbor => {
+          if (neighbor === parent) return;
+          if (discovered[neighbor] !== undefined) {
+            low[node] = Math.min(low[node], discovered[neighbor]);
+            return;
+          }
+          children++;
+          visit(neighbor, node);
+          low[node] = Math.min(low[node], low[neighbor]);
+          if (parent !== null && low[neighbor] >= discovered[node]) {
+            articulations.add(node);
+          }
+        });
+        if (parent === null && children >= 2) articulations.add(node);
+      }
+      NODES.forEach(node => {
+        if (!failedNodes.has(node.id) && discovered[node.id] === undefined) {
+          visit(node.id, null);
+        }
+      });
+      return articulations.size;
+    }
+
+    function averageSingleLinkFailureHealth(extraEdge = null) {
+      const graphEdges = extraEdge ? [...EDGES, extraEdge] : EDGES;
+      let totalScore = 0;
+      let scenarioCount = 0;
+      graphEdges.forEach(edge => {
+        const key = edgeKey(edge.u, edge.v);
+        if (failedEdges.has(key) || failedNodes.has(edge.u) ||
+            failedNodes.has(edge.v)) return;
+        failedEdges.add(key);
+        totalScore += calculateResilience(extraEdge).score;
+        failedEdges.delete(key);
+        scenarioCount++;
+      });
+      return scenarioCount ? totalScore / scenarioCount : 0;
+    }
+
+    function updateResiliencePanel() {
+      const stats = calculateResilience();
+      const routes = getRoutePerformance();
+      const transmissions = packetsDelivered + packetLosses;
+      const deliveryRatio = transmissions
+        ? `${Math.round(packetsDelivered / transmissions * 100)}%`
+        : "N/A";
+      const details = document.getElementById("resilience-details");
+      if (details) {
+        details.innerHTML =
+          `Health <strong class="text-emerald-300">${stats.score}%</strong> · ` +
+          `${stats.reachable}/${stats.totalNodes} reachable · ` +
+          `${stats.activeLinks}/${stats.totalLinks} active links · ` +
+          `loss ${stats.loss}%<br>` +
+          `${routes.count} available route(s) · avg route cost ${routes.averageCost} · ` +
+          `packet delivery ${deliveryRatio}`;
+      }
+      const labScore = document.getElementById("lab-score");
+      if (labScore) labScore.textContent = `${stats.score}% HEALTH`;
+    }
+
+    function getRoutePerformance() {
+      if (failedNodes.has("R1") || failedNodes.has("Server1")) {
+        return { count: 0, averageCost: "N/A" };
+      }
+      const adj = Object.fromEntries(NODES.map(node => [node.id, []]));
+      EDGES.forEach(edge => {
+        if (failedEdges.has(edgeKey(edge.u, edge.v)) ||
+            failedNodes.has(edge.u) || failedNodes.has(edge.v)) return;
+        adj[edge.u].push({ node: edge.v, cost: edge.cost });
+        adj[edge.v].push({ node: edge.u, cost: edge.cost });
+      });
+      let count = 0;
+      let totalCost = 0;
+      const visited = new Set(["R1"]);
+      function visit(node, cost) {
+        if (node === "Server1") {
+          count++;
+          totalCost += cost;
+          return;
+        }
+        adj[node].forEach(edge => {
+          if (visited.has(edge.node)) return;
+          visited.add(edge.node);
+          visit(edge.node, cost + edge.cost);
+          visited.delete(edge.node);
+        });
+      }
+      visit("R1", 0);
+      return {
+        count,
+        averageCost: count ? (totalCost / count).toFixed(1) : "N/A"
+      };
+    }
+
+    function snapshotBeforeFailure(scenario) {
+      reportBefore = {
+        scenario,
+        previousPath: [...activePath],
+        previousCost: pathCost,
+        previousResilience: calculateResilience(),
+        failedLinks: Array.from(failedEdges),
+        failedNodes: Array.from(failedNodes)
+      };
+      addLog(`WHAT-IF SCENARIO SNAPSHOT: ${scenario}.`, "LAB",
+        "text-violet-400 bg-violet-950/60 border-violet-800/60");
+    }
+
+    function runPredefinedScenario() {
+      const selector = document.getElementById("scenario-select");
+      const scenarioKey = selector.value;
+      const scenario = selector.options[selector.selectedIndex].text;
+      snapshotBeforeFailure(scenario);
+      failedEdges.clear();
+      failedNodes.clear();
+      if (scenarioKey === "primary" || scenarioKey === "uplinks" || scenarioKey === "cascading") {
+        failedEdges.add(edgeKey("R3", "R5"));
+      }
+      if (scenarioKey === "backup" || scenarioKey === "uplinks" || scenarioKey === "cascading") {
+        failedEdges.add(edgeKey("R2", "R5"));
+      }
+      if (scenarioKey === "router-r3" || scenarioKey === "cascading") {
+        failedNodes.add("R3");
+      }
+      if (scenarioKey === "cascading") {
+        failedNodes.add("R4");
+      }
+      addLog(`FAILURE SCENARIO EXECUTED: ${scenario}; SPF recalculation started.`, "LAB",
+        "text-amber-400 bg-amber-950/60 border-amber-800/60");
+      addLog("OSPF SIMULATION: LSA flooded and link-state database refreshed; running SPF.",
+        "ROUTING", "text-cyan-400 bg-cyan-950/60 border-cyan-800/60");
+      runAlgorithms();
+      showHudBanner("WHAT-IF FAILURE ANALYSIS", `Scenario [${scenario}] applied to a simulation state.`, "ANALYZING",
+        "bg-amber-950/90", "text-amber-300", "border-amber-700", "bg-amber-500");
+    }
+
+    function recommendBackupLink() {
+      const current = calculateResilience();
+      const currentBridgeCount = countTopologyBridges();
+      const currentArticulationCount = countTopologyArticulations();
+      const currentFailureHealth = averageSingleLinkFailureHealth();
+      const candidates = [];
+      const routers = NODES.filter(node => node.type === "router");
+      for (let i = 0; i < routers.length; i++) {
+        for (let j = i + 1; j < routers.length; j++) {
+          const u = routers[i].id;
+          const v = routers[j].id;
+          if (failedNodes.has(u) || failedNodes.has(v) ||
+              EDGES.some(e => edgeKey(e.u, e.v) === edgeKey(u, v))) continue;
+          const edge = { u, v, cost: 2, backup: true };
+          const after = calculateResilience(edge);
+          const failureHealth = averageSingleLinkFailureHealth(edge);
+          const bridgesReduced = currentBridgeCount - countTopologyBridges(edge);
+          const articulationsReduced = currentArticulationCount -
+            countTopologyArticulations(edge);
+          candidates.push({
+            ...edge,
+            score: after.score,
+            improvement: after.score - current.score,
+            singleFailureGain: failureHealth - currentFailureHealth,
+            bridgesReduced,
+            articulationsReduced,
+            componentsJoined: Math.max(0, current.components.length - after.components.length)
+          });
+        }
+      }
+      candidates.sort((a, b) =>
+        b.singleFailureGain - a.singleFailureGain ||
+        b.improvement - a.improvement ||
+        b.articulationsReduced - a.articulationsReduced ||
+        b.bridgesReduced - a.bridgesReduced ||
+        b.componentsJoined - a.componentsJoined
+      );
+      if (!candidates.length) {
+        addLog("BACKUP RECOMMENDATION: No missing candidate links.", "SYSTEM",
+          "text-slate-300 bg-slate-900 border-slate-700");
+        return;
+      }
+      const candidate = candidates[0];
+      recommendedLink = candidate;
+      const applyButton = document.getElementById("btn-apply-link");
+      applyButton.disabled = false;
+      applyButton.textContent = `Apply ${candidate.u} ↔ ${candidate.v}`;
+      const candidatesText = `${candidate.u} ↔ ${candidate.v} (cost ${candidate.cost})`;
+      const reason = candidate.singleFailureGain > 0
+        ? `simulation improves average health under a single-link failure by ${candidate.singleFailureGain.toFixed(1)} points`
+        : candidate.bridgesReduced
+        ? `simulation removes ${candidate.bridgesReduced} bridge link(s)`
+        : candidate.articulationsReduced
+          ? `simulation removes ${candidate.articulationsReduced} articulation point(s)`
+        : candidate.componentsJoined
+          ? `simulation joins ${candidate.componentsJoined} component(s)`
+          : `adds an alternate inter-router path (simulated score ${candidate.score}%)`;
+      addLog(`BACKUP-LINK RECOMMENDATION: Add ${candidatesText}; ${reason}.`, "RECOMMEND",
+        "text-violet-400 bg-violet-950/60 border-violet-800/60");
+      showHudBanner("BACKUP-LINK CANDIDATE", `Recommended: ${candidatesText}; ${reason}.`, "REDUNDANCY",
+        "bg-violet-950/90", "text-violet-300", "border-violet-700", "bg-violet-500");
+    }
+
+    function applyRecommendedLink() {
+      if (!recommendedLink) return;
+      const { u, v, cost } = recommendedLink;
+      EDGES.push({
+        u, v, cost, backup: true,
+        name: `${u} ↔ ${v} SIMULATED BACKUP`,
+        subnet: "SIMULATED REDUNDANCY"
+      });
+      recommendedLink = null;
+      document.getElementById("btn-apply-link").disabled = true;
+      document.getElementById("btn-apply-link").textContent = "Apply recommended link";
+      addLog(`REDUNDANT LINK APPLIED TO SIMULATION: ${u} ↔ ${v} (cost ${cost}).`,
+        "SUCCESS", "text-emerald-400 bg-emerald-950/60 border-emerald-800/60");
+      runAlgorithms();
+    }
+
+    function buildFailureReportRows() {
+      const stats = calculateResilience();
+      return [
+        ["Field", "Value"],
+        ["Scenario", reportBefore ? reportBefore.scenario : "Current topology"],
+        ["Failed links", Array.from(failedEdges).sort().join("; ") || "None"],
+        ["Failed routers", Array.from(failedNodes).sort().join("; ") || "None"],
+        ["Affected devices", NODES.filter(node => !isReachable(node.id)).map(node => node.id).join("; ") || "None"],
+        ["Previous route", reportBefore ? reportBefore.previousPath.join(" -> ") || "No route" : "Not captured"],
+        ["Previous cost", reportBefore && reportBefore.previousCost !== Infinity ? String(reportBefore.previousCost) : "INF"],
+        ["New route", activePath.join(" -> ") || "No route"],
+        ["New cost", pathCost === Infinity ? "INF" : String(pathCost)],
+        ["Reachable devices", `${stats.reachable}/${stats.totalNodes}`],
+        ["Active links", `${stats.activeLinks}/${stats.totalLinks}`],
+        ["Resilience score", `${stats.score}%`],
+        ["Resilience before failure", reportBefore ? `${reportBefore.previousResilience.score}%` : "Not captured"],
+        ["Connectivity loss", `${stats.loss}%`],
+        ["Bridges", Array.from(bridges).join("; ")],
+        ["Articulation points", Array.from(cutVertices).join("; ")],
+        ["Recovery action", "Use Recover All Links / Routers"],
+        ["Recovery time ms", lastRecoveryDuration === null
+          ? "Not measured" : String(lastRecoveryDuration)]
+      ];
+    }
+
+    function exportFailureReport() {
+      const report = buildFailureReportRows();
+      const csv = report.map(row => row.map(value =>
+        `"${String(value).replace(/"/g, '""')}"`).join(",")).join("\n");
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "network-failure-report.csv";
+      link.click();
+      URL.revokeObjectURL(url);
+      addLog("REPORT EXPORTED: network-failure-report.csv.", "REPORT",
+        "text-emerald-400 bg-emerald-950/60 border-emerald-800/60");
+    }
+
+    function printFailureReport() {
+      const report = buildFailureReportRows();
+      const escapeHtml = value => String(value)
+        .replace(/&/g, "&amp;").replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+      document.getElementById("failure-report-print").innerHTML =
+        `<h1>Network Failure Report</h1><table><thead><tr><th>${report[0].map(escapeHtml).join("</th><th>")}</th></tr></thead><tbody>` +
+        report.slice(1).map(row =>
+          `<tr><th>${escapeHtml(row[0])}</th><td>${escapeHtml(row[1])}</td></tr>`
+        ).join("") + "</tbody></table>";
+      window.print();
+    }
+
+    function algorithmStep(delta) {
+      if (!algorithmSteps.length) return;
+      algorithmStepIndex = Math.max(0, Math.min(algorithmSteps.length - 1,
+                                                 algorithmStepIndex + delta));
+      const state = algorithmSteps[algorithmStepIndex];
+      activeVisitedNode = state.node || state.selected || state.current || null;
+      updateUI();
+      document.getElementById("algorithm-status").textContent =
+        `${algorithmStepIndex + 1}/${algorithmSteps.length} · ${state.type || "ALGORITHM"}`;
+      document.getElementById("algorithm-state").textContent =
+        state.description || JSON.stringify(state);
+    }
+
+    function algorithmPlay() {
+      if (!algorithmSteps.length) {
+        algorithmStep(0);
+        return;
+      }
+      clearInterval(algorithmTimer);
+      algorithmTimer = setInterval(() => {
+        if (algorithmStepIndex >= algorithmSteps.length - 1) {
+          clearInterval(algorithmTimer);
+          return;
+        }
+        algorithmStep(1);
+      }, 650);
+    }
+
+    function algorithmPause() {
+      clearInterval(algorithmTimer);
+    }
+
+    function algorithmReset() {
+      clearInterval(algorithmTimer);
+      algorithmStepIndex = 0;
+      algorithmStep(0);
+    }
+
+    function getPacketRoute() {
+      if (!activePath.length || failedEdges.has(edgeKey("PC1", "R1")) ||
+          failedNodes.has("PC1") || failedNodes.has("R1") || failedNodes.has("Server1")) return [];
+      return ["PC1", ...activePath];
+    }
+
+    function sendPacket() {
+      if (!getPacketRoute().length) {
+        packetLosses++;
+        addLog("PACKET DROPPED: PC1 has no active route to Server1.", "CRITICAL", "text-rose-400 bg-rose-950/60 border-rose-800/60");
+        updatePacketStats();
+        return;
+      }
+
+      packets.push({ id: nextPacketId++, progress: 0 });
+      renderPackets();
+      addLog("PACKET SENT: TCP payload dispatched from PC1 to Server1.", "TRAFFIC", "text-cyan-400 bg-cyan-950/60 border-cyan-800/60");
+      updatePacketStats();
+    }
+
+    function renderPackets() {
+      const layer = document.getElementById("packets-layer");
+      const route = getPacketRoute();
+      if (route.length < 2) {
+        if (packets.length) {
+          packetLosses += packets.length;
+          packets = [];
+          updatePacketStats();
+          addLog("PACKET LOSS: Active route from PC1 to Server1 was interrupted.", "CRITICAL", "text-rose-400 bg-rose-950/60 border-rose-800/60");
+        }
+        const status = document.getElementById("packet-status");
+        status.className = "flex items-center gap-1.5 text-[9px] font-bold text-rose-400";
+        status.innerHTML = '<span class="h-1.5 w-1.5 rounded-full bg-rose-400"></span>NO ROUTE';
+        layer.innerHTML = "";
+        return;
+      }
+      const status = document.getElementById("packet-status");
+      status.className = `flex items-center gap-1.5 text-[9px] font-bold ${packets.length ? "text-emerald-400" : "text-slate-400"}`;
+      status.innerHTML = packets.length
+        ? '<span class="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400"></span>IN FLIGHT'
+        : '<span class="h-1.5 w-1.5 rounded-full bg-slate-500"></span>READY';
+
+      const pathData = route.map((id, index) => {
+        const node = NODES.find(item => item.id === id);
+        return `${index === 0 ? "M" : "L"} ${node.x} ${node.y}`;
+      }).join(" ");
+      layer.innerHTML = `
+        <path d="${pathData}" fill="none" stroke="#22d3ee" stroke-width="1.5" stroke-dasharray="3 9" opacity="0.35" />
+        ${packets.map(packet => `
+          <g id="packet-${packet.id}" filter="url(#cyanGlow)">
+            <rect x="-7" y="-5" width="14" height="10" rx="3" fill="#06b6d4" stroke="#cffafe" stroke-width="1.5" />
+            <path d="M-3 -1h6M-3 2h3" stroke="#ecfeff" stroke-width="1" stroke-linecap="round" />
+          </g>
+        `).join("")}
+      `;
+    }
+
+    function updatePacketStats() {
+      document.getElementById("packet-in-flight").textContent = packets.length;
+      document.getElementById("packet-delivered").textContent = packetsDelivered;
+      document.getElementById("packet-loss").textContent = packetLosses;
+      updateResiliencePanel();
+    }
+
+    function animatePackets(timestamp) {
+      const elapsed = lastPacketFrame ? Math.min(timestamp - lastPacketFrame, 100) : 0;
+      lastPacketFrame = timestamp;
+
+      const route = getPacketRoute();
+      if (route.length > 1 && elapsed > 0) {
+        const segments = [];
+        let totalLength = 0;
+        for (let index = 0; index < route.length - 1; index++) {
+          const from = NODES.find(node => node.id === route[index]);
+          const to = NODES.find(node => node.id === route[index + 1]);
+          const length = Math.hypot(to.x - from.x, to.y - from.y);
+          segments.push({ from, to, length });
+          totalLength += length;
+        }
+
+        packets.forEach(packet => {
+          packet.progress += elapsed / 6500;
+          const distance = Math.min(packet.progress, 1) * totalLength;
+          let traversed = 0;
+          let position = segments[segments.length - 1].to;
+          for (const segment of segments) {
+            if (distance <= traversed + segment.length) {
+              const fraction = (distance - traversed) / segment.length;
+              position = {
+                x: segment.from.x + (segment.to.x - segment.from.x) * fraction,
+                y: segment.from.y + (segment.to.y - segment.from.y) * fraction
+              };
+              break;
+            }
+            traversed += segment.length;
+          }
+          const element = document.getElementById(`packet-${packet.id}`);
+          if (element) element.setAttribute("transform", `translate(${position.x} ${position.y})`);
+        });
+
+        const deliveredNow = packets.filter(packet => packet.progress >= 1).length;
+        if (deliveredNow) {
+          packets = packets.filter(packet => packet.progress < 1);
+          packetsDelivered += deliveredNow;
+          renderPackets();
+          updatePacketStats();
+        }
+      }
+
+      window.requestAnimationFrame(animatePackets);
     }
 
     function isReachable(targetId) {
+      if (failedNodes.has("R1") || failedNodes.has(targetId)) return false;
       const q = ["R1"];
       const visited = new Set(["R1"]);
       while (q.length > 0) {
         const curr = q.shift();
         if (curr === targetId) return true;
         EDGES.forEach(e => {
-          if (failedEdges.has(edgeKey(e.u, e.v))) return;
+          if (failedEdges.has(edgeKey(e.u, e.v)) || failedNodes.has(e.u) || failedNodes.has(e.v)) return;
           if (e.u === curr && !visited.has(e.v)) { visited.add(e.v); q.push(e.v); }
           if (e.v === curr && !visited.has(e.u)) { visited.add(e.u); q.push(e.u); }
         });
@@ -463,14 +1105,18 @@
         failedEdges.delete(key);
         addLog(`CIRCUIT RECONSTITUTED: Link ${u} ↔ ${v} set to UP.`, "SUCCESS", "text-emerald-400 bg-emerald-950/60 border-emerald-800/60");
       } else {
+        if (!reportBefore) snapshotBeforeFailure("Custom link failure");
         failedEdges.add(key);
         addLog(`CIRCUIT SEVERED: Link ${u} ↔ ${v} is DOWN.`, "CRITICAL", "text-rose-400 bg-rose-950/60 border-rose-800/60");
+        addLog("OSPF SIMULATION: LSA flooded and link-state database refreshed; running SPF.",
+          "ROUTING", "text-cyan-400 bg-cyan-950/60 border-cyan-800/60");
       }
       runAlgorithms();
     }
 
     function simulateBlackout() {
       const key = edgeKey("R3", "R5");
+      if (!failedEdges.has(key) && !reportBefore) snapshotBeforeFailure("Primary uplink failure");
       failedEdges.add(key);
       addLog("BLACKOUT TRIGGERED: Primary trunk R3-R5 (10.0.35.0/30) collapsed.", "CRITICAL", "text-rose-400 bg-rose-950/60 border-rose-800/60");
       addLog("OSPF FLOODING: Shortest Path First recalculation rerouting traffic via R2-R5 backup link.", "ROUTING", "text-cyan-400 bg-cyan-950/60 border-cyan-800/60");
@@ -479,17 +1125,64 @@
     }
 
     function recoverAll() {
-      failedEdges.clear();
+      if (window.recoveryTimer) {
+        addLog("RECOVERY: a restoration sequence is already running.", "SYSTEM",
+          "text-amber-400 bg-amber-950/60 border-amber-800/60");
+        return;
+      }
+      const actions = [
+        ...Array.from(failedEdges).sort().map(key => ({ kind: "link", key })),
+        ...Array.from(failedNodes).sort().map(node => ({ kind: "router", node }))
+      ];
+      if (!actions.length) {
+        addLog("RECOVERY: all links and routers are already online.", "SYSTEM",
+          "text-slate-300 bg-slate-900 border-slate-700");
+        return;
+      }
+      const recoveryStarted = performance.now();
       activeHighlightMode = null;
       activeVisitedNode = null;
-      addLog("SEQUENTIAL RECOVERY INITIALIZED: Restoring failed links to nominal.", "SYSTEM", "text-blue-400 bg-blue-950/60 border-blue-800/60");
-      showHudBanner("CIRCUITS RECONSTITUTED", "All 9 edges operational. Network returned to 100% nominal state.", "RECOVERED", "bg-emerald-950/90", "text-emerald-300", "border-emerald-700", "bg-emerald-500");
-      runAlgorithms();
+      addLog(`SEQUENTIAL RECOVERY INITIALIZED: restoring ${actions.length} failed component(s).`,
+        "SYSTEM", "text-blue-400 bg-blue-950/60 border-blue-800/60");
+      let step = 0;
+      window.recoveryTimer = setInterval(() => {
+        const action = actions[step++];
+        if (action.kind === "link") {
+          failedEdges.delete(action.key);
+          addLog(`RECOVERY: link ${action.key.replace("-", " ↔ ")} restored.`,
+            "SUCCESS", "text-emerald-400 bg-emerald-950/60 border-emerald-800/60");
+        } else {
+          failedNodes.delete(action.node);
+          addLog(`RECOVERY: router ${action.node} restored.`,
+            "SUCCESS", "text-emerald-400 bg-emerald-950/60 border-emerald-800/60");
+        }
+        runAlgorithms();
+        if (step === actions.length) {
+          clearInterval(window.recoveryTimer);
+          window.recoveryTimer = null;
+          const duration = Math.round(performance.now() - recoveryStarted);
+          lastRecoveryDuration = duration;
+          addLog(`RECOVERY COMPLETE: network restored in ${duration} ms.`,
+            "SUCCESS", "text-emerald-400 bg-emerald-950/60 border-emerald-800/60");
+          showHudBanner("NETWORK RECOVERED", `Restoration completed in ${duration} ms.`,
+            "RECOVERED", "bg-emerald-950/90", "text-emerald-300",
+            "border-emerald-700", "bg-emerald-500");
+        }
+      }, 350);
     }
 
     // 1. Tarjan Bridges Action
     function triggerTarjanBridges() {
       activeHighlightMode = 'bridges';
+      algorithmSteps = Object.entries(tarjanDiscovery)
+        .sort((a, b) => a[1] - b[1])
+        .map(([node, discovery]) => ({
+          type: "TARJAN",
+          node,
+          description: `Visit ${node} · discovery ${discovery} · low ${tarjanLow[node]} · bridges [${Array.from(bridges).join(", ")}]`
+        }));
+      if (!algorithmSteps.length) algorithmSteps = [{ type: "TARJAN", description: "No bridges detected in the active graph." }];
+      algorithmStepIndex = 0;
       const bridgeList = Array.from(bridges).join(", ");
       addLog(`TARJAN BRIDGES: Detected ${bridges.size} bridge edges: ${bridgeList}. Removing any of these increases disconnected components.`, "WARNING", "text-amber-400 bg-amber-950 border-amber-800");
       showHudBanner("TARJAN BRIDGES DETECTED", `Critical cut-edges: [${bridgeList}]. Edge failure partitions topology!`, `O(V+E) | ${bridges.size} BRIDGES`, "bg-amber-950/90", "text-amber-300", "border-amber-700", "bg-amber-500");
@@ -508,16 +1201,26 @@
     // 3. BFS Animated Traversal
     function triggerBFS() {
       activeHighlightMode = 'traversal';
-      const q = ["R1"], visited = new Set(["R1"]), order = [];
+      const q = failedNodes.has("R1") ? [] : ["R1"];
+      const visited = new Set(q);
+      const order = [];
+      algorithmSteps = [];
       while (q.length > 0) {
         const curr = q.shift();
         order.push(curr);
         EDGES.forEach(e => {
-          if (failedEdges.has(edgeKey(e.u, e.v))) return;
+          if (failedEdges.has(edgeKey(e.u, e.v)) ||
+              failedNodes.has(e.u) || failedNodes.has(e.v)) return;
           const neighbor = e.u === curr ? e.v : (e.v === curr ? e.u : null);
           if (neighbor && !visited.has(neighbor)) { visited.add(neighbor); q.push(neighbor); }
         });
+        algorithmSteps.push({
+          type: "BFS",
+          node: curr,
+          description: `Visit ${curr} · queue [${q.join(", ")}] · order ${order.join(", ")}`
+        });
       }
+      algorithmStepIndex = 0;
 
       addLog(`RUNNING BFS: ${order.join(" → ")}`, "DSA", "text-cyan-400 bg-cyan-950/60 border-cyan-800/60");
       showHudBanner("BFS LEVEL-ORDER TRAVERSAL", `Sequence: ${order.join(" → ")}`, `QUEUE O(V+E)`, "bg-cyan-950/90", "text-cyan-300", "border-cyan-700", "bg-cyan-500");
@@ -540,7 +1243,10 @@
     // 4. DFS Animated Traversal
     function triggerDFS() {
       activeHighlightMode = 'traversal';
-      const stack = ["R1"], visited = new Set(), order = [];
+      const stack = failedNodes.has("R1") ? [] : ["R1"];
+      const visited = new Set();
+      const order = [];
+      algorithmSteps = [];
       while (stack.length > 0) {
         const curr = stack.pop();
         if (visited.has(curr)) continue;
@@ -548,12 +1254,19 @@
         order.push(curr);
         const neighbors = [];
         EDGES.forEach(e => {
-          if (failedEdges.has(edgeKey(e.u, e.v))) return;
+          if (failedEdges.has(edgeKey(e.u, e.v)) ||
+              failedNodes.has(e.u) || failedNodes.has(e.v)) return;
           if (e.u === curr) neighbors.push(e.v);
           if (e.v === curr) neighbors.push(e.u);
         });
         neighbors.reverse().forEach(n => { if (!visited.has(n)) stack.push(n); });
+        algorithmSteps.push({
+          type: "DFS",
+          node: curr,
+          description: `Visit ${curr} · stack [${stack.join(", ")}] · order ${order.join(", ")}`
+        });
       }
+      algorithmStepIndex = 0;
 
       addLog(`RUNNING DFS: ${order.join(" → ")}`, "DSA", "text-blue-400 bg-blue-950/60 border-blue-800/60");
       showHudBanner("DFS DEPTH-FIRST TRAVERSAL", `Sequence: ${order.join(" → ")}`, `STACK O(V+E)`, "bg-blue-950/90", "text-blue-300", "border-blue-700", "bg-blue-500");
@@ -591,23 +1304,34 @@
         <span class="w-1.5 h-1.5 rounded-full ${activePath.length ? 'bg-cyan-400 animate-ping' : 'bg-rose-500'}"></span>
         <span>${routeTxt}</span>
       `;
-      document.getElementById("stat-cost").textContent = pathCost !== Infinity ? `${pathCost} (Primary Trunk)` : "INF (Blackout)";
+      const pathUsesBackup = activePath.some((node, index) =>
+        index < activePath.length - 1 && EDGES.some(edge =>
+          edge.backup && edgeKey(edge.u, edge.v) === edgeKey(node, activePath[index + 1])));
+      document.getElementById("stat-cost").textContent =
+        pathCost !== Infinity ? `${pathCost} (${pathUsesBackup ? "Backup Failover" : "Primary Trunk"})` : "INF (Blackout)";
       document.getElementById("stat-bridges").textContent = `${bridges.size} Cut-Edges`;
       document.getElementById("stat-cuts").textContent = `${cutVertices.size} Cut-Nodes`;
 
-      const upCount = EDGES.length - failedEdges.size;
-      const health = Math.round((upCount / EDGES.length) * 100);
+      const upCount = EDGES.filter(edge =>
+        !failedEdges.has(edgeKey(edge.u, edge.v)) &&
+        !failedNodes.has(edge.u) && !failedNodes.has(edge.v)).length;
+      const health = calculateResilience().score;
       document.getElementById("stat-health-txt").textContent = `${health}%`;
       const bar = document.getElementById("stat-health-bar");
       bar.style.width = `${health}%`;
       bar.className = `h-full transition-all duration-500 ${health > 75 ? 'bg-emerald-500' : (health > 40 ? 'bg-amber-500' : 'bg-rose-500')}`;
-      document.getElementById("circuit-counter-badge").textContent = `${upCount}/9 UP`;
+      document.getElementById("circuit-counter-badge").textContent = `${upCount}/${EDGES.length} UP`;
+      document.getElementById("graph-size-top").textContent = `DSA Graph: |V| = ${NODES.length}, |E| = ${EDGES.length}`;
+      document.getElementById("graph-size-bottom").textContent = `DSA Graph: |V| = ${NODES.length}, |E| = ${EDGES.length}`;
+      updateResiliencePanel();
 
       // 2. Render Left Edge list
       const edgeList = document.getElementById("edge-controls-list");
       edgeList.innerHTML = EDGES.map(e => {
         const key = edgeKey(e.u, e.v);
-        const isDown = failedEdges.has(key);
+        const endpointDown = failedNodes.has(e.u) || failedNodes.has(e.v);
+        const linkFailed = failedEdges.has(key);
+        const isDown = endpointDown || linkFailed;
         const isBridge = bridges.has(key);
         return `
           <div class="p-2 rounded-lg border flex items-center justify-between text-xs transition-all ${isDown ? 'bg-rose-950/20 border-rose-900/50' : 'bg-slate-900/60 border-slate-800 hover:border-slate-700'}">
@@ -622,8 +1346,8 @@
                 <div class="text-[10px] text-slate-400 mono">Cost: ${e.cost} • ${e.subnet}</div>
               </div>
             </div>
-            <button onclick="toggleLink('${e.u}', '${e.v}')" class="px-2.5 py-1 rounded text-[10px] font-bold transition-all ${isDown ? 'bg-rose-600 hover:bg-rose-500 text-white' : 'bg-emerald-600 hover:bg-emerald-500 text-white'}">
-              ${isDown ? 'DOWN' : 'UP'}
+            <button ${endpointDown ? "disabled" : ""} onclick="toggleLink('${e.u}', '${e.v}')" class="px-2.5 py-1 rounded text-[10px] font-bold transition-all ${isDown ? 'bg-rose-600 hover:bg-rose-500 text-white' : 'bg-emerald-600 hover:bg-emerald-500 text-white'} disabled:cursor-not-allowed disabled:opacity-50">
+              ${endpointDown ? 'ROUTER DOWN' : (linkFailed ? 'DOWN' : 'UP')}
             </button>
           </div>
         `;
@@ -631,14 +1355,15 @@
 
       // 3. Render SVG Edges
       const edgesLayer = document.getElementById("edges-layer");
+      const packetRoute = getPacketRoute();
       edgesLayer.innerHTML = EDGES.map(e => {
         const uNode = NODES.find(n => n.id === e.u);
         const vNode = NODES.find(n => n.id === e.v);
         const key = edgeKey(e.u, e.v);
-        const isFailed = failedEdges.has(key);
+        const isFailed = failedEdges.has(key) || failedNodes.has(e.u) || failedNodes.has(e.v);
         const isBridge = bridges.has(key);
-        const onRoute = activePath.some((node, i) => 
-          (node === e.u && activePath[i+1] === e.v) || (node === e.v && activePath[i+1] === e.u)
+        const onRoute = packetRoute.some((node, i) =>
+          (node === e.u && packetRoute[i+1] === e.v) || (node === e.v && packetRoute[i+1] === e.u)
         );
 
         let strokeColor = "#334155";
@@ -682,6 +1407,8 @@
           </g>
         `;
       }).join("");
+
+      renderPackets();
 
       // 4. Render SVG Nodes with Cisco Icons
       const nodesLayer = document.getElementById("nodes-layer");
@@ -794,12 +1521,20 @@
     document.getElementById("btn-cuts").addEventListener("click", triggerCutVertices);
     document.getElementById("btn-bfs").addEventListener("click", triggerBFS);
     document.getElementById("btn-dfs").addEventListener("click", triggerDFS);
+    document.getElementById("btn-send-packet").addEventListener("click", sendPacket);
+    document.getElementById("btn-scenario").addEventListener("click", runPredefinedScenario);
+    document.getElementById("btn-recommend").addEventListener("click", recommendBackupLink);
+    document.getElementById("btn-apply-link").addEventListener("click", applyRecommendedLink);
+    document.getElementById("btn-export-report").addEventListener("click", exportFailureReport);
+    document.getElementById("btn-print-report").addEventListener("click", printFailureReport);
 
     // Boot
     addLog("Network Blackout Analyzer NOC online. OSPF Area 0 initialized.", "SYSTEM", "text-blue-400 bg-blue-950/60 border-blue-800/60");
     addLog("Core ring established (R1-R2-R3-R4). Primary uplink active via R3-R5.", "INFO", "text-slate-300 bg-slate-800 border-slate-700");
     addLog("Backup trunk R2-R5 primed with cost 5 (dormant standby path).", "ROUTING", "text-purple-400 bg-purple-950/60 border-purple-800/60");
     runAlgorithms();
+    updatePacketStats();
+    window.requestAnimationFrame(animatePackets);
   </script>
 </body>
 </html>

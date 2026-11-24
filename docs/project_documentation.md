@@ -36,7 +36,10 @@ Dijkstra excludes failed edges and nodes. The normal route is R1-R2-R3-R5-Server
 
 - **Desktop:** Run `python network_blackout.py` for the Tkinter visualization and controls.
 - **Browser:** Run `python server.py`, then open `http://localhost:8080`. The server serves `web/index.html` and opens the page automatically.
-- **Web controls:** Simulate outages, recover the topology, highlight bridges and cut vertices, and run animated BFS or DFS traversals.
+- **Web controls:** Simulate outages, recover the topology, highlight bridges and cut vertices, and run BFS or DFS traversals. Packet flow starts only when **Send packet** is clicked; the panel reports delivered, in-flight, and dropped packets.
+- **Resilience lab:** Run predefined link and router failure scenarios, compare pre/post route and resilience details, inspect connectivity health, and export a failure report as CSV or print/save it as PDF.
+- **Redundancy planning:** Simulate candidate links against the active topology, rank candidates by connectivity and bridge reduction, and apply a recommendation to the running simulation.
+- **Algorithm controls:** Step through, play, pause, and reset BFS, DFS, Dijkstra SPF, and Tarjan snapshots. OSPF convergence and LSA messages are educational simulation behavior, not a complete OSPF implementation.
 
 ## Implementation
 
@@ -46,6 +49,7 @@ Dijkstra excludes failed edges and nodes. The normal route is R1-R2-R3-R5-Server
 - `server.py`: local HTTP server
 - `web/index.html`: browser dashboard
 - `tests/test_graph.py`: graph algorithm and failure tests
+- `algorithms/graph.py`: resilience scoring, components, backup-link ranking, failure reports, and algorithm snapshots
 
 ## Testing
 
@@ -55,4 +59,4 @@ Run the unit tests with:
 python -m unittest tests/test_graph.py
 ```
 
-Tests cover traversal, failover, unreachable destinations, bridge and cut-node detection, edge and node toggling, and permanent edge removal.
+Tests cover traversal, failover, unreachable destinations, bridge and cut-node detection, edge and node toggling, permanent edge removal, resilience scoring, candidate links, algorithm snapshots, and recovery reports.

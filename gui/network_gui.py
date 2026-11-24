@@ -6,7 +6,9 @@ bridge/articulation point highlighting, live logs, statistics, and recovery anim
 
 from __future__ import annotations
 import tkinter as tk
-from tkinter import ttk
+from tkinter import ttk, filedialog
+import csv
+import time
 from algorithms.graph import Graph, edge_key, NODES, EDGE_DEFINITIONS, POSITIONS
 
 
@@ -23,7 +25,12 @@ class NetworkBlackoutApp:
 
         self.edge_vars: dict[tuple[str, str], tk.BooleanVar] = {}
         self.router_vars: dict[str, tk.BooleanVar] = {}
-        self.last_path: list[str] = []
+        self.last_path, self.previous_cost = self.graph.find_shortest_path("R1", "Server1")
+        self.previous_path = list(self.last_path or [])
+        self.last_path = self.last_path or []
+        self.last_recovery_ms = 0
+        self.recommended_link: dict | None = None
+        self.added_edges: set[tuple[str, str]] = set()
         self.last_bridges: set[tuple[str, str]] = set()
         self.last_articulations: set[str] = set()
         self.status = tk.StringVar(value="Network online. Select a link or run an analysis.")
@@ -58,7 +65,8 @@ class NetworkBlackoutApp:
                   font=("Segoe UI", 10, "bold")).pack(anchor="w")
         link_box = ttk.Frame(right)
         link_box.pack(fill="x", pady=(5, 8))
-        for u, v, weight, backup in EDGE_DEFINITIONS:
+        for (u, v), weight in sorted(self.graph.weights.items()):
+            backup = edge_key(u, v) in self.graph.backup_edges
             key = edge_key(u, v)
             var = tk.BooleanVar(value=True)
             self.edge_vars[key] = var
@@ -90,6 +98,10 @@ class NetworkBlackoutApp:
             ("Run DFS Traversal", self.run_dfs),
             ("Find Route to Server1", self.find_route),
             ("Analyze Current Failures", self.analyze_current_failures),
+            ("Resilience Score & Components", self.analyze_resilience),
+            ("Recommend Backup Link", self.recommend_backup_link),
+            ("Apply Recommended Backup Link", self.apply_recommended_link),
+            ("Export Failure Report (CSV)", self.export_report),
             ("Animate Link Recovery", self.animate_recovery),
             ("Reset Network", self.reset_network),
         ]
@@ -125,6 +137,7 @@ class NetworkBlackoutApp:
 
     def on_link_toggle(self, u, v, variable):
         key = edge_key(u, v)
+        self.previous_path, self.previous_cost = self.graph.find_shortest_path("R1", "Server1")
         if variable.get():
             self.graph.failed_edges.discard(key)
             self.log(f"LINK UP: {u} — {v}")
@@ -137,6 +150,7 @@ class NetworkBlackoutApp:
         self.refresh_view()
 
     def on_router_toggle(self, router, variable):
+        self.previous_path, self.previous_cost = self.graph.find_shortest_path("R1", "Server1")
         is_up = self.graph.toggle_node(router)
         self.log(f"ROUTER {'UP' if is_up else 'DOWN'}: {router}")
         self.last_path = []
@@ -146,6 +160,7 @@ class NetworkBlackoutApp:
 
     def simulate_blackout(self):
         key = edge_key("R3", "R5")
+        self.previous_path, self.previous_cost = self.graph.find_shortest_path("R1", "Server1")
         self.graph.failed_edges.add(key)
         self.edge_vars[key].set(False)
         self.last_bridges.clear()
@@ -252,40 +267,64 @@ class NetworkBlackoutApp:
         if getattr(self, "recovery_running", False):
             self.status.set("Recovery animation is already running.")
             return
-        pending = sorted(self.graph.failed_edges)
+        pending_edges = sorted(self.graph.failed_edges)
+        pending_routers = sorted(self.graph.failed_nodes)
+        pending = [("link", key) for key in pending_edges]
+        pending.extend(("router", router) for router in pending_routers)
         if not pending:
-            self.status.set("No failed links to recover. The network is already online.")
-            self.log("RECOVERY: no failed links; network already online.")
+            self.status.set("No failed links or routers. The network is already online.")
+            self.log("RECOVERY: no failed components; network already online.")
             return
         self.recovery_running = True
+        recovery_started = time.perf_counter()
         self.last_path = []
         self.last_bridges.clear()
         self.last_articulations.clear()
-        self.log(f"RECOVERY STARTED: restoring {len(pending)} failed link(s) one at a time.")
+        self.log(f"RECOVERY STARTED: restoring {len(pending)} failed component(s) one at a time.")
 
         def restore_next(index=0):
             if index >= len(pending):
                 self.recovery_running = False
+                self.last_recovery_ms = round(
+                    (time.perf_counter() - recovery_started) * 1000
+                )
                 path, cost = self.graph.find_shortest_path("R1", "Server1")
                 self.last_path = path or []
                 self.refresh_view()
-                self.status.set("Recovery complete. All previously failed links are restored.")
-                self.log("RECOVERY COMPLETE: all previously failed links restored.")
+                self.status.set(
+                    f"Recovery complete in {self.last_recovery_ms} ms. "
+                    "All previously failed components are restored."
+                )
+                self.log(
+                    f"RECOVERY COMPLETE: all previously failed components restored "
+                    f"in {self.last_recovery_ms} ms."
+                )
                 if path:
                     self.log(f"POST-RECOVERY ROUTE: {' -> '.join(path)} (cost {cost:g}).")
                 return
-            key = pending[index]
-            self.graph.failed_edges.discard(key)
-            if key in self.edge_vars:
-                self.edge_vars[key].set(True)
+            kind, target = pending[index]
+            if kind == "link":
+                key = target
+                self.graph.failed_edges.discard(key)
+                if key in self.edge_vars:
+                    self.edge_vars[key].set(True)
+                label = f"LINK RECOVERED: {key[0]} — {key[1]} is UP."
+            else:
+                router = target
+                self.graph.failed_nodes.discard(router)
+                self.router_vars[router].set(True)
+                label = f"ROUTER RECOVERED: {router} is UP."
             self.refresh_view()
-            self.log(f"LINK RECOVERED ({index + 1}/{len(pending)}): {key[0]} — {key[1]} is UP.")
-            self.status.set(f"Recovering links: {index + 1}/{len(pending)} restored.")
+            self.log(f"{label} ({index + 1}/{len(pending)}).")
+            self.status.set(f"Recovering components: {index + 1}/{len(pending)} restored.")
             self.root.after(650, lambda: restore_next(index + 1))
 
         restore_next()
 
     def reset_network(self):
+        for u, v in self.added_edges:
+            self.graph.remove_edge(u, v)
+        self.added_edges.clear()
         self.graph.failed_edges.clear()
         self.graph.failed_nodes.clear()
         for var in self.edge_vars.values():
@@ -299,6 +338,105 @@ class NetworkBlackoutApp:
         self.status.set("All routers and links restored.")
         self.log("RESET: all routers and links restored.")
 
+    def analyze_resilience(self):
+        result = self.graph.network_resilience_score("R1")
+        components = "; ".join(
+            "[" + ", ".join(component) + "]"
+            for component in result["components"]
+        )
+        text = (
+            f"Resilience {result['score']}% | "
+            f"reachable {result['reachable']}/{result['total_nodes']} | "
+            f"active links {result['active_links']}/{result['total_links']} | "
+            f"connectivity loss {result['connectivity_loss_percent']}%"
+        )
+        self.status.set(text)
+        self.log("RESILIENCE ANALYSIS: " + text)
+        self.log("DISCONNECTED COMPONENTS: " + components)
+        degrees = ", ".join(
+            f"{node}:{degree}" for node, degree in sorted(self.graph.node_degrees().items())
+        )
+        self.log("NODE DEGREE: " + degrees)
+
+    def recommend_backup_link(self):
+        routers = [node for node in self.graph.adj if node.startswith("R")]
+        candidates = self.graph.backup_link_candidates(routers)
+        if not candidates:
+            self.recommended_link = None
+            self.status.set("No backup-link candidates are available.")
+            self.log("BACKUP RECOMMENDATION: no missing links available.")
+            return
+        candidate = candidates[0]
+        self.recommended_link = candidate
+        text = (
+            f"{candidate['u']} — {candidate['v']} "
+            f"(cost {candidate['weight']}; score {candidate['score']}%; "
+            f"improvement {candidate['improvement']}%)"
+        )
+        self.status.set("Recommended backup link: " + text)
+        self.log("BACKUP-LINK RECOMMENDATION: " + text)
+        self.log("REASON: " + candidate["reason"] + ".")
+
+    def apply_recommended_link(self):
+        if self.recommended_link is None:
+            self.status.set("Run backup-link recommendation first.")
+            return
+        candidate = self.recommended_link
+        u, v = candidate["u"], candidate["v"]
+        key = edge_key(u, v)
+        if key in self.graph.weights:
+            self.recommended_link = None
+            self.status.set("The recommended link already exists.")
+            return
+        self.graph.add_edge(u, v, candidate["weight"], backup=True)
+        self.added_edges.add(key)
+        self.recommended_link = None
+        self.last_path, cost = self.graph.find_shortest_path("R1", "Server1")
+        self.last_path = self.last_path or []
+        self.refresh_view()
+        self.status.set(f"Added redundant link {u} — {v}; active route cost {cost:g}.")
+        self.log(
+            f"REDUNDANT LINK APPLIED: {u} — {v} (cost {candidate['weight']}); "
+            f"resilience simulation score {candidate['score']}%."
+        )
+
+    def export_report(self):
+        path = filedialog.asksaveasfilename(
+            title="Export Network Failure Report",
+            defaultextension=".csv",
+            filetypes=[("CSV files", "*.csv")],
+        )
+        if not path:
+            return
+        report = self.graph.failure_report(
+            "Desktop network simulation",
+            previous_path=self.previous_path,
+            previous_cost=self.previous_cost,
+        )
+        rows = [
+            ("Scenario", report["scenario"]),
+            ("Timestamp", report["timestamp"]),
+            ("Failed links", "; ".join(report["failed_links"]) or "None"),
+            ("Failed routers", "; ".join(report["failed_routers"]) or "None"),
+            ("Affected devices", "; ".join(report["affected_devices"]) or "None"),
+            ("Previous route", " -> ".join(report["previous_route"]) or "None"),
+            ("Previous cost", str(report["previous_cost"])),
+            ("New route", " -> ".join(report["new_route"]) or "No route"),
+            ("New cost", str(report["new_cost"])),
+            ("Bridges", "; ".join(report["bridges"]) or "None"),
+            ("Articulation points", "; ".join(report["articulation_points"]) or "None"),
+            ("Resilience score", str(report["resilience"]["score"])),
+            ("Connectivity loss %", str(report["resilience"]["connectivity_loss_percent"])),
+            ("Recovery action", "Restore failed links and routers"),
+            ("Recovery time ms", str(self.last_recovery_ms)),
+        ]
+        with open(path, "w", newline="", encoding="utf-8") as output:
+            writer = csv.writer(output)
+            writer.writerow(["Field", "Value"])
+            writer.writerows(rows)
+        self.status.set(f"Failure report exported to {path}")
+        self.log("REPORT EXPORTED: " + path)
+
     def refresh_view(self):
         self.canvas.delete("all")
         reachable = self.graph.get_reachable_nodes("R1")
@@ -308,7 +446,8 @@ class NetworkBlackoutApp:
         }
 
         # Draw edges
-        for u, v, weight, backup in EDGE_DEFINITIONS:
+        for (u, v), weight in sorted(self.graph.weights.items()):
+            backup = edge_key(u, v) in self.graph.backup_edges
             x1, y1 = POSITIONS[u]
             x2, y2 = POSITIONS[v]
             key = edge_key(u, v)
@@ -381,7 +520,7 @@ class NetworkBlackoutApp:
             x += 105
 
         up_count = sum(
-            1 for u, v, _, _ in EDGE_DEFINITIONS
+            1 for u, v in self.graph.weights
             if edge_key(u, v) not in self.graph.failed_edges
             and u not in self.graph.failed_nodes and v not in self.graph.failed_nodes
         )
